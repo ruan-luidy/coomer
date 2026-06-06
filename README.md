@@ -18,15 +18,20 @@ effect to highlight things.
 > dotnet run --project coomer
 ```
 
-Build a single self-contained native executable (NativeAOT):
+Build a self-contained release (runs without .NET installed):
 
 ```console
-> dotnet publish coomer -c Release -r win-x64
+> dotnet publish coomer -c Release -r win-x64 -p:PublishAot=false --self-contained
 ```
 
-The resulting `coomer.exe` lives under `coomer/bin/Release/net10.0/win-x64/publish/`.
-Bind it to a keyboard shortcut (via a Start menu shortcut, PowerToys, AutoHotkey,
-etc.) to launch it on demand, the same way boomer is bound to a WM hotkey.
+The output (a folder with `coomer.exe` and its dependencies) lives under
+`coomer/bin/Release/net10.0/win-x64/publish/`. Bind `coomer.exe` to a keyboard
+shortcut (a Start menu shortcut key, PowerToys, AutoHotkey, etc.) to launch it on
+demand, the same way boomer is bound to a WM hotkey.
+
+> For a small single-file binary, build with NativeAOT from a *Developer PowerShell
+> for VS* (`dotnet publish coomer -c Release -r win-x64`). The linker needs that
+> environment to be on PATH.
 
 ## Controls
 
