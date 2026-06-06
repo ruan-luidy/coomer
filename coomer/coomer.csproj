@@ -11,6 +11,9 @@
     <AssemblyName>coomer</AssemblyName>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- single-file: extrai as dlls nativas (glfw etc.) pra disco, senao o Silk.NET
+         nao acha o backend de janela e crasha com "Couldn't find a suitable window platform". -->
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
 
   <ItemGroup>
