@@ -30,6 +30,9 @@ public sealed class BoomerApp
   private Camera _camera = null!;
   private Flashlight _flashlight = null!;
   private float _frameRate = 60f;
+  private nint _hwnd;
+  private int _frames;
+  private bool _shown;
 
   public BoomerApp(Config config, string configPath)
   {
@@ -51,6 +54,7 @@ public sealed class BoomerApp
       WindowBorder = WindowBorder.Hidden,
       TopMost = true,
       VSync = true,
+      IsVisible = false, // comeca invisivel; mostramos so depois do 1o frame (sem piscada)
     };
 
     _window = Window.Create(options);
@@ -58,6 +62,7 @@ public sealed class BoomerApp
     _window.Update += OnUpdate;
     _window.Render += OnRender;
     _window.FramebufferResize += OnResize;
+    _window.Closing += OnClosing;
 
     _window.Run();
     _window.Dispose();
@@ -75,6 +80,10 @@ public sealed class BoomerApp
     _flashlight = new Flashlight();
     _renderer = new Renderer(_gl, _screenshot);
     _handler = new InputHandler(_input, _camera, _flashlight, _config, _screenshot, _configPath, _frameRate);
+
+    if (_window.Native?.Win32 is { } win32)
+      _hwnd = win32.Hwnd;
+    OverlayWindowNative.HideFromTaskbar(_hwnd);
   }
 
   private void OnUpdate(double delta)
@@ -92,12 +101,30 @@ public sealed class BoomerApp
 
   private void OnRender(double delta)
   {
+    // Mostra a janela so a partir do 2o frame: o 1o ja foi desenhado e apresentado,
+    // entao ela aparece direto com a captura (sem o flash do fundo vazio).
+    if (_frames == 1 && !_shown)
+    {
+      _window.IsVisible = true;
+      OverlayWindowNative.SetForegroundWindow(_hwnd);
+      _shown = true;
+    }
+
     var windowSize = new Vector2(_window.FramebufferSize.X, _window.FramebufferSize.Y);
     _renderer.Draw(_camera, _flashlight, _handler.Mirror, windowSize, _handler.CursorPosition);
+    _frames++;
   }
 
   private void OnResize(Vector2D<int> size)
   {
     _gl.Viewport(0, 0, (uint)size.X, (uint)size.Y);
+  }
+
+  // Libera o input e os recursos de GL ao fechar o overlay. Sem isso, ao reabrir,
+  // o GLFW reusa o handle da janela e o Silk crasha com "More than one input context".
+  private void OnClosing()
+  {
+    _renderer?.Dispose();
+    _input?.Dispose();
   }
 }
