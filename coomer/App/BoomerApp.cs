@@ -1,0 +1,103 @@
+using System.Numerics;
+using Silk.NET.Maths;
+using Silk.NET.Windowing;
+using Silk.NET.Input;
+using Silk.NET.OpenGL;
+using Coomer.Features.Navigation;
+using Coomer.Features.Capture;
+using Coomer.Features.Configuration;
+using Coomer.Features.Lighting;
+using Coomer.Features.Input;
+using Coomer.Features.Rendering;
+
+namespace Coomer.App;
+
+/// <summary>
+/// Host da aplicacao: cria a janela borderless/topmost cobrindo a tela, abre o
+/// contexto GL e roda o loop. E o equivalente ao <c>main()</c> de boomer.nim.
+/// </summary>
+public sealed class BoomerApp
+{
+  private readonly Config _config;
+  private readonly string _configPath;
+
+  private IWindow _window = null!;
+  private GL _gl = null!;
+  private IInputContext _input = null!;
+  private Screenshot _screenshot = null!;
+  private Renderer _renderer = null!;
+  private InputHandler _handler = null!;
+  private Camera _camera = null!;
+  private Flashlight _flashlight = null!;
+  private float _frameRate = 60f;
+
+  public BoomerApp(Config config, string configPath)
+  {
+    _config = config;
+    _configPath = configPath;
+  }
+
+  public void Run()
+  {
+    // Capturar ANTES de abrir a janela (senao o overlay entra na foto) e SO o monitor
+    // onde esta o cursor — assim janela e captura tem o mesmo tamanho/origem.
+    _screenshot = Screenshot.CaptureMonitorUnderCursor();
+
+    var options = WindowOptions.Default with
+    {
+      Size = new Vector2D<int>(_screenshot.Width, _screenshot.Height),
+      Position = new Vector2D<int>(_screenshot.OriginX, _screenshot.OriginY),
+      Title = "coomer",
+      WindowBorder = WindowBorder.Hidden,
+      TopMost = true,
+      VSync = true,
+    };
+
+    _window = Window.Create(options);
+    _window.Load += OnLoad;
+    _window.Update += OnUpdate;
+    _window.Render += OnRender;
+    _window.FramebufferResize += OnResize;
+
+    _window.Run();
+    _window.Dispose();
+  }
+
+  private void OnLoad()
+  {
+    _gl = _window.CreateOpenGL();
+    _input = _window.CreateInput();
+
+    if (_window.Monitor?.VideoMode.RefreshRate is int rate and > 0)
+      _frameRate = rate;
+
+    _camera = new Camera(new Vector2(_screenshot.Width, _screenshot.Height));
+    _flashlight = new Flashlight();
+    _renderer = new Renderer(_gl, _screenshot);
+    _handler = new InputHandler(_input, _camera, _flashlight, _config, _screenshot, _configPath, _frameRate);
+  }
+
+  private void OnUpdate(double delta)
+  {
+    // dt fixo amarrado ao refresh (mesmo feeling do boomer original).
+    float dt = 1f / _frameRate;
+    var windowSize = new Vector2(_window.FramebufferSize.X, _window.FramebufferSize.Y);
+
+    _camera.Update(_config, dt, _handler.Dragging, windowSize);
+    _flashlight.Update(dt);
+
+    if (_handler.Quitting)
+      _window.Close();
+  }
+
+  private void OnRender(double delta)
+  {
+    var windowSize = new Vector2(_window.FramebufferSize.X, _window.FramebufferSize.Y);
+    _renderer.Draw(_camera, _flashlight, _handler.Mirror, windowSize, _handler.CursorPosition);
+  }
+
+  private void OnResize(Vector2D<int> size)
+  {
+    _gl.Viewport(0, 0, (uint)size.X, (uint)size.Y);
+  }
+}
