@@ -7,6 +7,9 @@ written in Nim for Linux/X11. `coomer` takes a screenshot of the monitor under
 the cursor and lets you zoom and pan around it, with an optional flashlight
 effect to highlight things.
 
+It runs resident in the background and pops the overlay on a global hotkey
+(`Ctrl+Alt+Z`), so it opens instantly without spinning up a new process each time.
+
 ## Dependencies
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
@@ -25,9 +28,9 @@ Build a self-contained release (runs without .NET installed):
 ```
 
 The output (a folder with `coomer.exe` and its dependencies) lives under
-`coomer/bin/Release/net10.0/win-x64/publish/`. Bind `coomer.exe` to a keyboard
-shortcut (a Start menu shortcut key, PowerToys, AutoHotkey, etc.) to launch it on
-demand, the same way boomer is bound to a WM hotkey.
+`coomer/bin/Release/net10.0/win-x64/publish/`. Run `coomer.exe` once and it stays
+in the background waiting for the hotkey. Drop a shortcut to it in your Startup
+folder (`shell:startup`) to have it ready on every login.
 
 > For a small single-file binary, build with NativeAOT from a *Developer PowerShell
 > for VS* (`dotnet publish coomer -c Release -r win-x64`). The linker needs that
@@ -35,10 +38,19 @@ demand, the same way boomer is bound to a WM hotkey.
 
 ## Controls
 
+Global hotkeys (work anywhere while coomer is running in the background):
+
+| Hotkey         | Description                          |
+|----------------|--------------------------------------|
+| `Ctrl+Alt+Z`   | Open the zoom overlay                |
+| `Ctrl+Alt+Q`   | Quit coomer (stop the background app)|
+
+Inside the overlay:
+
 | Control                                   | Description                              |
 |-------------------------------------------|------------------------------------------|
 | `0`                                       | Reset position, scale and mirror         |
-| `q` or `Esc`                              | Quit                                     |
+| `q` or `Esc`                              | Close the overlay (coomer keeps running) |
 | `r`                                       | Reload configuration                     |
 | `m`                                       | Mirror the image                         |
 | `f`                                       | Toggle the flashlight effect             |
@@ -67,3 +79,4 @@ The config file lives at `%APPDATA%\coomer\config` with the format:
 - Captures only the monitor under the cursor instead of the whole X screen.
 - Panning is clamped to the image bounds.
 - The flashlight radius is a fixed screen size (it does not grow with zoom).
+- Runs resident with a global hotkey instead of being launched per use.
