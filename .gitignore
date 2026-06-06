@@ -1,0 +1,14 @@
+# Build
+bin/
+obj/
+
+# Visual Studio
+.vs/
+*.user
+
+# Rider
+.idea/
+
+# NativeAOT / publish
+publish/
+*.pdb
