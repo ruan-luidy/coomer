@@ -88,13 +88,16 @@ public sealed class BoomerApp
     if (_window.Native?.Win32 is { } win32)
       _hwnd = win32.Hwnd;
     OverlayWindowNative.HideFromTaskbar(_hwnd);
+    ApplyViewport();
   }
 
   private void OnUpdate(double delta)
   {
     // dt fixo amarrado ao refresh (mesmo feeling do boomer original).
     float dt = 1f / _frameRate;
-    var windowSize = new Vector2(_window.FramebufferSize.X, _window.FramebufferSize.Y);
+    // Usa o tamanho REAL da tela (nao o framebuffer, que tem +1px) pra projecao casar
+    // pixel a pixel com o desktop e nao deslocar a imagem.
+    var windowSize = new Vector2(_screenshot.Width, _screenshot.Height);
 
     _camera.Update(_config, dt, _handler.Dragging, windowSize);
     _flashlight.Update(dt);
@@ -114,14 +117,22 @@ public sealed class BoomerApp
       _shown = true;
     }
 
-    var windowSize = new Vector2(_window.FramebufferSize.X, _window.FramebufferSize.Y);
+    var windowSize = new Vector2(_screenshot.Width, _screenshot.Height);
     _renderer.Draw(_camera, _flashlight, _handler.Mirror, windowSize, _handler.CursorPosition);
     _frames++;
   }
 
   private void OnResize(Vector2D<int> size)
   {
-    _gl.Viewport(0, 0, (uint)size.X, (uint)size.Y);
+    ApplyViewport();
+  }
+
+  // Renderiza so na area visivel do monitor. O +1px extra do framebuffer cai embaixo
+  // (fora da tela), entao deslocamos o viewport em Y pra imagem cobrir a tela exata.
+  private void ApplyViewport()
+  {
+    int yOff = _window.FramebufferSize.Y - _screenshot.Height;
+    _gl.Viewport(0, yOff, (uint)_screenshot.Width, (uint)_screenshot.Height);
   }
 
   // Libera o input e os recursos de GL ao fechar o overlay. Sem isso, ao reabrir,
