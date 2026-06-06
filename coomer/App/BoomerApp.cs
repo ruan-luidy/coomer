@@ -48,7 +48,11 @@ public sealed class BoomerApp
 
     var options = WindowOptions.Default with
     {
-      Size = new Vector2D<int>(_screenshot.Width, _screenshot.Height),
+      // +1px de altura de proposito: se a janela cobre o monitor EXATO, o Windows
+      // engata "fullscreen optimization" e faz uma troca de modo (a tela pisca ao
+      // abrir/fechar). 1px a mais (que cai fora da tela) mantem ela como janela
+      // composta normal -> sem piscada.
+      Size = new Vector2D<int>(_screenshot.Width, _screenshot.Height + 1),
       Position = new Vector2D<int>(_screenshot.OriginX, _screenshot.OriginY),
       Title = "coomer",
       WindowBorder = WindowBorder.Hidden,
