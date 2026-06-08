@@ -19,6 +19,14 @@ public sealed class Config
   public float CameraRecenterLerpSpeed { get; set; } = 6.0f;
   public bool HideCursorOnFlashlight { get; set; } = true;
 
+  // Falshligh com fisica de bolha (mola + amortecimento + deformacao).
+  public float BubbleMass { get; set; } = 1.0f;
+  public float BubbleSpringK { get; set; } = 80.0f;
+  public float BubbleDamping { get; set; } = 8.0f;
+  public float BubbleStretchFactor { get; set; } = 0.0001f;
+  public float BubbleSqueezeFactor { get; set; } = 0.5f;
+  public float BubbleDeformSmoothing { get; set; } = 8.0f;
+
   public static Config Default() => new();
 
   public static Config Load(string path)
@@ -51,6 +59,13 @@ public sealed class Config
         case "camera_recenter_lerp_speed": config.CameraRecenterLerpSpeed = ParseFloat(value); break;
         case "hide_cursor_on_flashlight": config.HideCursorOnFlashlight = ParseBool(value); break;
 
+        case "bubble_mass": config.BubbleMass = ParseFloat(value); break;
+        case "bubble_spring_k": config.BubbleSpringK = ParseFloat(value); break;
+        case "bubble_damping": config.BubbleDamping = ParseFloat(value); break;
+        case "bubble_stretch_factor": config.BubbleStretchFactor = ParseFloat(value); break;
+        case "bubble_squeeze_factor": config.BubbleSqueezeFactor = ParseFloat(value); break;
+        case "bubble_deform_smoothing": config.BubbleDeformSmoothing = ParseFloat(value); break;
+
         default: throw new InvalidDataException($"Chave de config desconhecida `{key}`");
       }
     }
@@ -70,6 +85,13 @@ public sealed class Config
     LerpCameraRecenter = fresh.LerpCameraRecenter;
     CameraRecenterLerpSpeed = fresh.CameraRecenterLerpSpeed;
     HideCursorOnFlashlight = fresh.HideCursorOnFlashlight;
+
+    BubbleMass = fresh.BubbleMass;
+    BubbleSpringK = fresh.BubbleSpringK;
+    BubbleDamping = fresh.BubbleDamping;
+    BubbleStretchFactor = fresh.BubbleStretchFactor;
+    BubbleSqueezeFactor = fresh.BubbleSqueezeFactor;
+    BubbleDeformSmoothing = fresh.BubbleDeformSmoothing;
   }
 
   public void Save(string path)
@@ -89,6 +111,13 @@ public sealed class Config
     w.WriteLine($"lerp_camera_recenter = {(LerpCameraRecenter ? "true" : "false")}");
     w.WriteLine($"camera_recenter_lerp_speed = {CameraRecenterLerpSpeed.ToString(c)}");
     w.WriteLine($"hide_cursor_on_flashlight = {(HideCursorOnFlashlight ? "true" : "false")}");
+
+    w.WriteLine($"bubble_mass = {BubbleMass.ToString(c)}");
+    w.WriteLine($"bubble_spring_k = {BubbleSpringK.ToString(c)}");
+    w.WriteLine($"bubble_damping = {BubbleDamping.ToString(c)}");
+    w.WriteLine($"bubble_stretch_factor = {BubbleStretchFactor.ToString(c)}");
+    w.WriteLine($"bubble_squeeze_factor = {BubbleSqueezeFactor.ToString(c)}");
+    w.WriteLine($"bubble_deform_smoothing = {BubbleDeformSmoothing.ToString(c)}");
   }
 
   private static float ParseFloat(string s) => float.Parse(s, CultureInfo.InvariantCulture);
