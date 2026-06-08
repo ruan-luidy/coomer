@@ -4,6 +4,7 @@ using Coomer.Features.Navigation;
 using Coomer.Features.Capture;
 using Coomer.Features.Configuration;
 using Coomer.Features.Lighting;
+using Coomer.App;
 
 namespace Coomer.Features.Input;
 
@@ -22,6 +23,7 @@ public sealed class InputHandler
 
   private Mouse _mouse;
   private bool _ctrl;
+  private bool _flashlightCursorHidden;
 
   public bool Quitting { get; private set; }
   public bool Mirror { get; private set; }
@@ -52,6 +54,27 @@ public sealed class InputHandler
     }
   }
 
+  /// <summary>Chamado todo frame pelo CoomerApp pra sincronizar o cursor.</summary>
+  public void Tick()
+  {
+    bool wantHide = _flashlight.IsEnabled && _config.HideCursorOnFlashlight;
+    if (wantHide != _flashlightCursorHidden)
+    {
+      OverlayWindowNative.SetCursorVisible(!wantHide);
+      _flashlightCursorHidden = wantHide;
+    }
+  }
+
+  /// <summary>Restaura cursor ao sair do overlay (CoomerApp chama em OnClosing).</summary>
+  public void RestoreCursor()
+  {
+    if (_flashlightCursorHidden)
+    {
+      OverlayWindowNative.SetCursorVisible(true);
+      _flashlightCursorHidden = false;
+    }
+  }
+
   private void OnKeyDown(IKeyboard keyboard, Key key, int scancode)
   {
     switch (key)
@@ -62,7 +85,7 @@ public sealed class InputHandler
         break;
 
       case Key.Number0:
-        _camera.Reset();
+        _camera.Reset(_config.LerpCameraRecenter);
         Mirror = false;
         break;
 
@@ -85,6 +108,23 @@ public sealed class InputHandler
 
       case Key.F:
         _flashlight.IsEnabled = !_flashlight.IsEnabled;
+        break;
+
+      case Key.H:
+      case Key.Left:
+        _camera.Pan(new Vector2(-_config.CameraPanAmount, 0));
+        break;
+      case Key.L:
+      case Key.Right:
+        _camera.Pan(new Vector2(_config.CameraPanAmount, 0));
+        break;
+      case Key.K:
+      case Key.Up:
+        _camera.Pan(new Vector2(0, -_config.CameraPanAmount));
+        break;
+      case Key.J:
+      case Key.Down:
+        _camera.Pan(new Vector2(0, _config.CameraPanAmount));
         break;
 
       case Key.Equal:
@@ -115,6 +155,7 @@ public sealed class InputHandler
       _camera.Position += delta;
       // delta e a distancia percorrida em 1 frame; * fps vira unidades/segundo.
       _camera.Velocity = delta * _frameRate;
+      _camera.LerpingToTarget = false; // arrastar cancela o lerp do reset
     }
 
     _mouse.Previous = _mouse.Current;
@@ -127,6 +168,13 @@ public sealed class InputHandler
       _mouse.Previous = _mouse.Current;
       _mouse.Drag = true;
       _camera.Velocity = Vector2.Zero;
+      _camera.LerpingToTarget = false; // cancela lerp ao comecar drag
+    }
+
+    else if (button == MouseButton.Middle)
+    {
+      _camera.Reset(_config.LerpCameraRecenter);
+      Mirror = false;
     }
   }
 
