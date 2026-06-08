@@ -13,6 +13,12 @@ public sealed class Config
   public float DragFriction { get; set; } = 6.0f;
   public float ScaleFriction { get; set; } = 4.0f;
 
+  // Pan por teclado, reset animado e ocultar curosr com a lanterna.
+  public float CameraPanAmount { get; set; } = 200.0f;     // px por tecla (H/J/K/L, setas)
+  public bool LerpCameraRecenter { get; set; } = true;     // tecla 0 / middle-click anima ate o centro
+  public float CameraRecenterLerpSpeed { get; set; } = 6.0f;
+  public bool HideCursorOnFlashlight { get; set; } = true;
+
   public static Config Default() => new();
 
   public static Config Load(string path)
@@ -30,14 +36,21 @@ public sealed class Config
 
       var key = line[..idx].Trim();
       var value = line[(idx + 1)..].Trim();
-      var number = float.Parse(value, CultureInfo.InvariantCulture);
+      var hash = value.IndexOf('#');
+      if (hash >= 0) value = value[..hash].Trim();
 
       switch (key)
       {
-        case "min_scale": config.MinScale = number; break;
-        case "scroll_speed": config.ScrollSpeed = number; break;
-        case "drag_friction": config.DragFriction = number; break;
-        case "scale_friction": config.ScaleFriction = number; break;
+        case "min_scale": config.MinScale = ParseFloat(value); break;
+        case "scroll_speed": config.ScrollSpeed = ParseFloat(value); break;
+        case "drag_friction": config.DragFriction = ParseFloat(value); break;
+        case "scale_friction": config.ScaleFriction = ParseFloat(value); break;
+
+        case "camera_pan_amount": config.CameraPanAmount  = ParseFloat(value); break;
+        case "lerp_camera_recenter": config.LerpCameraRecenter = ParseBool(value); break;
+        case "camera_recenter_lerp_speed": config.CameraRecenterLerpSpeed = ParseFloat(value); break;
+        case "hide_cursor_on_flashlight": config.HideCursorOnFlashlight = ParseBool(value); break;
+
         default: throw new InvalidDataException($"Chave de config desconhecida `{key}`");
       }
     }
@@ -52,6 +65,11 @@ public sealed class Config
     ScrollSpeed = fresh.ScrollSpeed;
     DragFriction = fresh.DragFriction;
     ScaleFriction = fresh.ScaleFriction;
+
+    CameraPanAmount = fresh.CameraPanAmount;
+    LerpCameraRecenter = fresh.LerpCameraRecenter;
+    CameraRecenterLerpSpeed = fresh.CameraRecenterLerpSpeed;
+    HideCursorOnFlashlight = fresh.HideCursorOnFlashlight;
   }
 
   public void Save(string path)
@@ -66,5 +84,17 @@ public sealed class Config
     w.WriteLine($"scroll_speed = {ScrollSpeed.ToString(c)}");
     w.WriteLine($"drag_friction = {DragFriction.ToString(c)}");
     w.WriteLine($"scale_friction = {ScaleFriction.ToString(c)}");
+
+    w.WriteLine($"camera_pan_amount = {CameraPanAmount.ToString(c)}");
+    w.WriteLine($"lerp_camera_recenter = {(LerpCameraRecenter ? "true" : "false")}");
+    w.WriteLine($"camera_recenter_lerp_speed = {CameraRecenterLerpSpeed.ToString(c)}");
+    w.WriteLine($"hide_cursor_on_flashlight = {(HideCursorOnFlashlight ? "true" : "false")}");
   }
+
+  private static float ParseFloat(string s) => float.Parse(s, CultureInfo.InvariantCulture);
+  private static bool ParseBool(string s) =>
+     s.Equals("true", StringComparison.OrdinalIgnoreCase)
+  || s.Equals("yes", StringComparison.OrdinalIgnoreCase)
+  || s.Equals("on", StringComparison.OrdinalIgnoreCase)
+  || s == "1";
 }
