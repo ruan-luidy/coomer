@@ -19,6 +19,11 @@ uniform float backgroundBlurRadius;
 uniform bool blurOutsideFl;
 uniform float outsideFlBlurRadius;
 
+uniform bool flFisheye;
+uniform float fisheyeStrength;
+uniform bool flClearGlass;
+uniform float clearGlassZoom;
+
 // Gaussian blur com pesos exp(-d2/(2sigma2)). samples teto em 8 pra nao
 // explodir em telas grandes; sigma = radius*0.5 deixa a curva mais chata
 // (pesos das bordas significativos), ai o blur aparece mesmo com o anel
@@ -120,6 +125,41 @@ void main()
     // so suaviza a transicao da textura interna pro anel.
     if (!flEnabled) {
         color = mix(base, bgColor, edgeAlpha);
+        return;
+    }
+
+    // ============= modo fisheye =============
+    // barrel quadratico: rSamp = rNorm * mix(1, rNorm, k).
+    //   centro (rNorm=0): rSamp=0, derivada = 1-k -> magnificacao 1/(1-k)
+    //   borda  (rNorm=1): rSamp=1, derivada = 1+k -> casa direitinho com o anel
+    // sample direto da textura, sem rim/sheen: a imagem fica nitida ("clear").
+    if (flFisheye) {
+        vec2 d = frag - center;
+        float r = length(d);
+        float rNorm = clamp(r / max(flRadius, 0.0001), 0.0, 1.0);
+        vec2 dir = (r > 0.0001) ? d / r : vec2(0.0);
+        float k = clamp(fisheyeStrength, 0.0, 0.95);
+        float rSamp = rNorm * mix(1.0, rNorm, k);
+        vec2 sampleOffset = dir * rSamp * flRadius;
+        vec2 displ = sampleOffset - d;
+        if (mirror) displ.x = -displ.x;
+        vec2 fishUV = effective_texcoord + displ / windowSize;
+        color = mix(texture(tex, fishUV), bgColor, edgeAlpha);
+        return;
+    }
+
+    // ============= modo vidro claro (lupa de leitura) =============
+    // zoom uniforme em toda a bolha: sampleOffset = d / zoom. linha reta
+    // continua reta em qualquer lugar — sem curvatura/warp perto da borda.
+    // tem um pequeno salto no proprio rim (conteudo zoomado vs anel real),
+    // mas ele cai dentro do fade do edgeAlpha + shadow do anel, fica invisivel.
+    if (flClearGlass) {
+        float zoom = max(1.0, clearGlassZoom);
+        vec2 d = frag - center;
+        vec2 displ = d / zoom - d;
+        if (mirror) displ.x = -displ.x;
+        vec2 glassUV = effective_texcoord + displ / windowSize;
+        color = mix(texture(tex, glassUV), bgColor, edgeAlpha);
         return;
     }
 

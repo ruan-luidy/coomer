@@ -35,6 +35,16 @@ public sealed class Config
   public bool BlurOutsideFlashlight { get; set; } = false;
   public float OutsideFlashlightBlurRadius { get; set; } = 6.0f;
 
+  // Modo fisheye: troca a refracao de gota de vidro por um barrel
+  // (lente olho-de-peixe) — magnifica o miolo e mantem o anel/sombra.
+  public bool FlashlightFisheye { get; set; } = false;
+  public float FisheyeStrength { get; set; } = 0.5f;
+
+  // Modo vidro claro: lupa de leitura — nucleo de zoom uniforme (sem curvar
+  // linha) + transicao suave nos ~30% da borda pra fechar com o anel.
+  public bool FlashlightClearGlass { get; set; } = false;
+  public float ClearGlassZoom { get; set; } = 1.10f;
+
   public static Config Default() => new();
 
   public static Config Load(string path)
@@ -79,6 +89,11 @@ public sealed class Config
         case "blur_outside_flashlight": config.BlurOutsideFlashlight = ParseBool(value); break;
         case "outside_flashlight_blur_radius": config.OutsideFlashlightBlurRadius = ParseFloat(value); break;
 
+        case "flashlight_fisheye": config.FlashlightFisheye = ParseBool(value); break;
+        case "fisheye_strength": config.FisheyeStrength = ParseFloat(value); break;
+        case "flashlight_clear_glass": config.FlashlightClearGlass = ParseBool(value); break;
+        case "clear_glass_zoom": config.ClearGlassZoom = ParseFloat(value); break;
+
         default: throw new InvalidDataException($"Chave de config desconhecida `{key}`");
       }
     }
@@ -110,6 +125,11 @@ public sealed class Config
     BackgroundBlurRadius = fresh.BackgroundBlurRadius;
     BlurOutsideFlashlight = fresh.BlurOutsideFlashlight;
     OutsideFlashlightBlurRadius = fresh.OutsideFlashlightBlurRadius;
+
+    FlashlightFisheye = fresh.FlashlightFisheye;
+    FisheyeStrength = fresh.FisheyeStrength;
+    FlashlightClearGlass = fresh.FlashlightClearGlass;
+    ClearGlassZoom = fresh.ClearGlassZoom;
   }
 
   public void Save(string path)
@@ -141,6 +161,11 @@ public sealed class Config
     w.WriteLine($"background_blur_radius = {BackgroundBlurRadius.ToString(c)}");
     w.WriteLine($"blur_outside_flashlight = {(BlurOutsideFlashlight ? "true" : "false")}");
     w.WriteLine($"outside_flashlight_blur_radius = {OutsideFlashlightBlurRadius.ToString(c)}");
+
+    w.WriteLine($"flashlight_fisheye = {(FlashlightFisheye ? "true" : "false")}");
+    w.WriteLine($"fisheye_strength = {FisheyeStrength.ToString(c)}");
+    w.WriteLine($"flashlight_clear_glass = {(FlashlightClearGlass ? "true" : "false")}");
+    w.WriteLine($"clear_glass_zoom = {ClearGlassZoom.ToString(c)}");
   }
 
   private static float ParseFloat(string s) => float.Parse(s, CultureInfo.InvariantCulture);

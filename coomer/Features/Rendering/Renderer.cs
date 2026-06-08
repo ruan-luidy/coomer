@@ -113,6 +113,11 @@ public sealed unsafe class Renderer : IDisposable
     _shader.SetInt("blurOutsideFl", config.BlurOutsideFlashlight ? 1 : 0);
     _shader.SetFloat("outsideFlBlurRadius", config.OutsideFlashlightBlurRadius);
 
+    _shader.SetInt("flFisheye", config.FlashlightFisheye ? 1 : 0);
+    _shader.SetFloat("fisheyeStrength", config.FisheyeStrength);
+    _shader.SetInt("flClearGlass", config.FlashlightClearGlass ? 1 : 0);
+    _shader.SetFloat("clearGlassZoom", config.ClearGlassZoom);
+
     _gl.BindVertexArray(_vao);
     _gl.DrawElements(PrimitiveType.Triangles, 6, DrawElementsType.UnsignedInt, (void*)0);
   }
