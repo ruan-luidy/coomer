@@ -9,102 +9,146 @@ uniform float flRadius;
 uniform float cameraScale;
 uniform bool mirror;
 
-// ====================== Fase 2: bolha ======================
 uniform vec2 bubblePos;
 uniform vec2 bubbleStretch;
 uniform float bubbleSqueeze;
 uniform bool flEnabled;
-// ===========================================================
 
-// ====================== Fase 3: blur ======================
 uniform bool blurBackground;
 uniform float backgroundBlurRadius;
 uniform bool blurOutsideFl;
 uniform float outsideFlBlurRadius;
-// ==========================================================
 
-// 9x9 = 81 taps. Em 4K pode pesar — abaixar o radius via config ajuda.
-// O passo no uv e radius/textureSize, entao com radius=N a varredura cobre
-// ~+/-N pixels (i,j em [-4,4] cada).
-vec4 boxBlur(vec2 uv, float radius)
+// Gaussian blur com pesos exp(-d2/(2sigma2)). samples teto em 8 pra nao
+// explodir em telas grandes; sigma = radius*0.5 deixa a curva mais chata
+// (pesos das bordas significativos), ai o blur aparece mesmo com o anel
+// escurecido por cima.
+vec4 gaussianBlur(vec2 uv, float radius)
 {
-    vec2 texel = radius / textureSize(tex, 0);
-    vec4 acc = vec4(0.0);
-    float n = 0.0;
-    for (int j = -4; j <= 4; j++)
-        for (int i = -4; i <= 4; i++)
-        {
-            acc += texture(tex, uv + vec2(float(i), float(j)) * texel);
-            n += 1.0;
+    if (radius < 0.5) return texture(tex, uv);
+    vec4 sum = vec4(0.0);
+    float total = 0.0;
+    vec2 texel = 1.0 / windowSize;
+    int samples = int(clamp(radius * 0.5, 1.0, 8.0));
+    float sigma = radius * 0.5;
+    float twoSigSq = 2.0 * sigma * sigma;
+    float stride = radius / float(samples);
+    for (int y = -samples; y <= samples; y++) {
+        for (int x = -samples; x <= samples; x++) {
+            float dx = float(x);
+            float dy = float(y);
+            float w = exp(-(dx*dx + dy*dy) / twoSigSq);
+            vec2 offset = vec2(dx, dy) * stride * texel;
+            sum += texture(tex, uv + offset) * w;
+            total += w;
         }
-    return acc / n;
+    }
+    return sum / total;
 }
 
-// Distancia "elipsoidal" usada pra desenhar a bolha. Compara direto com flRadius.
-// Math equivalente ao sdfEllipse do zoomer:
-//   semi-eixo na direcao do stretch CRESCE (1+sl)  -> bubble estica nessa direcao
-//   semi-eixo perpendicular         DIMINUI (1-sq) -> bubble comprime perpendicular
-//   distancia normalizada = sqrt((along/a)^2 + (across/b)^2)
-// Sem stretch, a=b=1 e a expressao colapsa pra length(p - center) — circulo.
-float bubbleDist(vec2 p, vec2 center, vec2 stretch, float squeeze)
+// SDF da bolha (elipsoidal): negativo dentro, positivo fora, 0 na borda.
+// Sem stretch, colapsa pra length(p-center) - radius (circulo simples).
+float sdfBubble(vec2 p, vec2 center, float radius, vec2 stretch, float squeeze)
 {
     vec2 d = p - center;
     float sl = length(stretch);
-    if (sl < 0.0001) return length(d);
+    if (sl < 0.0001) return length(d) - radius;
     vec2 dir = stretch / sl;
     vec2 perp = vec2(-dir.y, dir.x);
     float along = dot(d, dir);
     float across = dot(d, perp);
-    float a = clamp(1.0 + sl, 0.5, 2.0);          // estica
-    float b = clamp(1.0 - squeeze, 0.3, 1.5);     // comprime
-    return length(vec2(along / a, across / b));
+    float rA = radius * clamp(1.0 + sl, 0.5, 2.0);
+    float rB = radius * clamp(1.0 - squeeze, 0.3, 1.5);
+    float minR = min(rA, rB);
+    return length(vec2(along / rA, across / rB)) * minR - minR;
+}
+
+// Normal do "domo" virtual sobre a tela. O gradient do SDF (dFdx/dFdy)
+// da a direcao xy; o z e calculado pra que a normal aponte pra cima no
+// centro do domo (sd = -thickness) e pros lados na borda (sd = 0).
+vec3 domeNormal(float sd, float thickness)
+{
+    float dx = dFdx(sd);
+    float dy = dFdy(sd);
+    float nCos = max(thickness + sd, 0.0) / thickness;
+    float nSin = sqrt(max(0.0, 1.0 - nCos * nCos));
+    return normalize(vec3(dx * nCos, dy * nCos, nSin));
+}
+
+// Altura do domo no ponto: 0 na borda, thickness no centro, half-sphere.
+float domeHeight(float sd, float thickness)
+{
+    if (sd >= 0.0) return 0.0;
+    if (sd < -thickness) return thickness;
+    float x = thickness + sd;
+    return sqrt(thickness * thickness - x * x);
 }
 
 void main()
 {
     vec2 effective_texcoord = texcoord;
-    if (mirror) {
-        effective_texcoord.x = 1 - effective_texcoord.x;
-    }
+    if (mirror) effective_texcoord.x = 1.0 - effective_texcoord.x;
 
-    // ====================== Fase 3: amostra base ======================
-    // Se blur_background ligado, o fundo INTEIRO ja vem borrado; ai dentro
-    // da lanterna a gente reamostra nitido p/ enxergar o que estamos vendo.
+    // amostra base do fundo (com ou sem blur global)
     vec4 base = blurBackground
-        ? boxBlur(effective_texcoord, backgroundBlurRadius)
+        ? gaussianBlur(effective_texcoord, backgroundBlurRadius)
         : texture(tex, effective_texcoord);
-    // ===================================================================
 
-    // ====================== Fase 2: centro/distancia da bolha ======================
-    // flRadius e em pixels de TELA (nao multiplica por cameraScale), entao o circulo
-    // mantem o mesmo tamanho mesmo com zoom — ideal pra destacar texto ao dar zoom.
-    vec2 center = vec2(bubblePos.x, windowSize.y - bubblePos.y);
-    float dist = bubbleDist(gl_FragCoord.xy, center, bubbleStretch, bubbleSqueeze);
-    // ===============================================================================
-
-    if (!flEnabled || flShadow < 0.001)
-    {
-        // Lanterna desligada -> imagem (base) sem sombra. Mantem compat com original:
-        // se flShadow=0 e flEnabled=0, comportamento e identico a "color = texture(...)".
+    if (!flEnabled && flShadow < 0.001) {
         color = base;
         return;
     }
 
-    if (dist < flRadius)
-    {
-        // dentro da lanterna -> imagem nitida (mesmo que blur_background esteja on)
-        color = blurBackground ? texture(tex, effective_texcoord) : base;
+    vec2 frag = gl_FragCoord.xy;
+    vec2 center = vec2(bubblePos.x, windowSize.y - bubblePos.y);
+    float sd = sdfBubble(frag, center, flRadius, bubbleStretch, bubbleSqueeze);
+
+    // anel ao redor da bolha: texturizado (possivelmente blurado) + sombra suave
+    vec4 outsideTexture = (blurOutsideFl && !blurBackground)
+        ? gaussianBlur(effective_texcoord, outsideFlBlurRadius)
+        : base;
+    float edgeAlpha = smoothstep(-2.0, 0.0, sd);
+    vec4 bgColor = mix(outsideTexture, vec4(0.0), min(edgeAlpha, flShadow));
+
+    // fora da bolha — entrega o anel direto
+    if (sd >= 0.0) {
+        color = bgColor;
+        return;
     }
-    else
-    {
-        // ====================== Fase 3: anel fora da lanterna ======================
-        // Quando blur_outside_flashlight=true e o fundo NAO esta borrado,
-        // borramos so a parte que vai escurecer (otimizacao: nao processa
-        // duas vezes quando blur_background ja foi feito).
-        vec4 outside = (blurOutsideFl && !blurBackground)
-            ? boxBlur(effective_texcoord, outsideFlBlurRadius)
-            : base;
-        // ===========================================================================
-        color = mix(outside, vec4(0.0, 0.0, 0.0, 1.0), flShadow);
+
+    // lanterna desligando (animacao do shadow indo a zero) — sem vidro,
+    // so suaviza a transicao da textura interna pro anel.
+    if (!flEnabled) {
+        color = mix(base, bgColor, edgeAlpha);
+        return;
     }
+
+    // ============= efeito de vidro: refracao + reflexao =============
+    // o domo virtual tem "thickness" de altura sobre a tela. luz da camera
+    // (z = -1) entra pela superficie curva e refrata com IOR 1.45 (vidro);
+    // a projecao xy do raio refratado da a deslocacao do uv (lente).
+    float thickness = 12.0 * pow(cameraScale, 0.5);
+    float ior = 1.45;
+    float baseHeight = thickness * 6.0;
+
+    vec3 normal = domeNormal(sd, thickness);
+    vec3 incident = vec3(0.0, 0.0, -1.0);
+    vec3 refractVec = refract(incident, normal, 1.0 / ior);
+    float h = domeHeight(sd, thickness);
+    float refractLength = (h + baseHeight)
+                        / max(0.001, dot(vec3(0.0, 0.0, -1.0), refractVec));
+    vec2 refractOffset = refractVec.xy * refractLength;
+    if (mirror) refractOffset.x = -refractOffset.x;
+    vec2 refractedUV = effective_texcoord + refractOffset / windowSize;
+    vec4 refractColor = texture(tex, refractedUV);
+
+    // brilho refletivo na borda (mais forte onde a normal aponta pros lados)
+    vec3 reflectVec = reflect(incident, normal);
+    float sheen = clamp(abs(reflectVec.x - reflectVec.y), 0.0, 1.0);
+    vec4 reflectColor = vec4(vec3(sheen), 0.0);
+    float reflectionFactor = (1.0 - normal.z) * 0.2 * (thickness / 12.0);
+    vec4 glassColor = clamp(mix(refractColor, reflectColor, reflectionFactor),
+                            0.0, 1.0);
+
+    color = mix(glassColor, bgColor, edgeAlpha);
 }
