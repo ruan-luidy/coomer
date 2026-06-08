@@ -30,4 +30,23 @@ internal static partial class OverlayWindowNative
     ex = (ex | WS_EX_TOOLWINDOW) & ~WS_EX_APPWINDOW;
     SetWindowLongPtr(hWnd, GWL_EXSTYLE, (nint)ex);
   }
+
+  [LibraryImport("user32.dll")]
+  public static partial int ShowCursor([MarshalAs(UnmanagedType.Bool)] bool bShow);
+
+  private static bool _hidden;
+
+  public static void SetCursorVisible(bool visible)
+  {
+    if (visible && _hidden)
+    {
+      while (ShowCursor(true) < 0) { }
+      _hidden = false;
+    }
+    else if (!visible && !_hidden)
+    {
+      while (ShowCursor(false) >= 0) { }
+      _hidden = true;
+    }
+  }
 }
