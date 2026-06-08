@@ -70,9 +70,10 @@ public sealed class Flashlight
     // raio anima ate o alvo
     Radius += (TargetRadius - Radius) * MathF.Min(1.0f, 8.0f * dt);
 
-    // Sombra cresce/diminui
+    // Sombra cresce/diminui — pico em 0.55 deixa o blur do anel visivel
+    // (a 0.8 sobrava so 20% da imagem e ficava quase preto).
     Shadow = IsEnabled
-      ? MathF.Min(Shadow + 6.0f * dt, 0.8f)
+      ? MathF.Min(Shadow + 6.0f * dt, 0.55f)
       : MathF.Max(Shadow - 6.0f * dt, 0.0f);
   }
 }
