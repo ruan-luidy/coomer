@@ -23,9 +23,9 @@ uniform bool blurOutsideFl;
 uniform float outsideFlBlurRadius;
 // ==========================================================
 
-// ====================== Fase 3: helper boxBlur ======================
-// 9x9 = 81 taps, single-pass. Suficiente p/ efeito suave sem dois passes
-// (sem FBO). Em 4K pode pesar — abaixar o radius via config ajuda.
+// 9x9 = 81 taps. Em 4K pode pesar — abaixar o radius via config ajuda.
+// O passo no uv e radius/textureSize, entao com radius=N a varredura cobre
+// ~+/-N pixels (i,j em [-4,4] cada).
 vec4 boxBlur(vec2 uv, float radius)
 {
     vec2 texel = radius / textureSize(tex, 0);
@@ -34,12 +34,11 @@ vec4 boxBlur(vec2 uv, float radius)
     for (int j = -4; j <= 4; j++)
         for (int i = -4; i <= 4; i++)
         {
-            acc += texture(tex, uv + vec2(float(i), float(j)) * texel * 0.25);
+            acc += texture(tex, uv + vec2(float(i), float(j)) * texel);
             n += 1.0;
         }
     return acc / n;
 }
-// =====================================================================
 
 // Distancia "elipsoidal" usada pra desenhar a bolha. Compara direto com flRadius.
 // Math equivalente ao sdfEllipse do zoomer:
