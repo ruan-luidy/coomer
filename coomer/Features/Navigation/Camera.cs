@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using Coomer.Features.Configuration;
 
 namespace Coomer.Features.Navigation;
@@ -21,6 +21,12 @@ public sealed class Camera
   public float DeltaScale;
   public Vector2 ScalePivot;
 
+  // Quando LerpingToTarget=true, Update() anima Position->TargetPosition e
+  // Scale->TargetScale a cada frame (em vez de dar snap como o Reset antigo).
+  public Vector2 TargetPosition;
+  public float TargetScale = 1.0f;
+  public bool LerpingToTarget;
+
   private readonly Vector2 _imageSize;
 
   public Camera(Vector2 imageSize) => _imageSize = imageSize;
@@ -30,6 +36,25 @@ public sealed class Camera
 
   public void Update(Config config, float dt, bool dragging, Vector2 windowSize)
   {
+    // Roda ANTES do bloco de DeltaScale para que um zoom acidental nao quebre
+    // a animcao de recentrar; o lerp termina quando esta perto o suficiente.
+    if (LerpingToTarget)
+    {
+      float t = MathF.Min(1.0f, dt * config.CameraRecenterLerpSpeed);
+      Position = Vector2.Lerp(Position, TargetPosition, t);
+      Scale = Scale + (TargetScale - Scale) * t;
+
+      if ((Position - TargetPosition).Length() < 0.5f
+          && MathF.Abs(TargetScale - Scale) < 0.001f)
+      {
+        Position = TargetPosition;
+        Scale = TargetScale;
+        Velocity = Vector2.Zero;
+        DeltaScale = 0f;
+        LerpingToTarget = false;
+      }
+    }
+
     if (MathF.Abs(DeltaScale) > 0.5f)
     {
       var p0 = (ScalePivot - windowSize * 0.5f) / Scale;
@@ -61,12 +86,32 @@ public sealed class Camera
     Position.Y = maxY > 0f ? Math.Clamp(Position.Y, -maxY, maxY) : 0f;
   }
 
-  /// <summary>Volta camera ao estado inicial (tecla 0).</summary>
-  public void Reset()
+  /// <summary>Volta camera ao estado inicial (tecla 0). Se <paramref name="animar"/>, anima.</summary>
+  public void Reset(bool animar)
   {
-    Scale = 1.0f;
-    DeltaScale = 0.0f;
-    Position = Vector2.Zero;
+    if (animar)
+    {
+      TargetPosition = Vector2.Zero;
+      TargetScale = 1.0f;
+      LerpingToTarget = true;
+      DeltaScale = 0f;
+      Velocity = Vector2.Zero;
+    }
+    else
+    {
+      Scale = 1.0f;
+      DeltaScale = 0.0f;
+      Position = Vector2.Zero;
+      Velocity = Vector2.Zero;
+      LerpingToTarget = false;
+    }
+  }
+
+  /// <summary>Pan instantaneo (usado pelas teclas H/J/K/L e setas).</summary>
+  public void Pan(Vector2 delta)
+  {
+    LerpingToTarget = false;
+    Position += delta;
     Velocity = Vector2.Zero;
   }
 }
