@@ -65,6 +65,6 @@ public sealed class Config
     w.WriteLine($"min_scale = {MinScale.ToString(c)}");
     w.WriteLine($"scroll_speed = {ScrollSpeed.ToString(c)}");
     w.WriteLine($"drag_friction = {DragFriction.ToString(c)}");
-    w.WriteLine($"scale_friction = {DragFriction.ToString(c)}");
+    w.WriteLine($"scale_friction = {ScaleFriction.ToString(c)}");
   }
 }
