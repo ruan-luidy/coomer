@@ -102,9 +102,16 @@ public sealed unsafe class Renderer : IDisposable
     _shader.SetInt("mirror", mirror ? 1 : 0);
 
     _shader.SetVec2("bubblePos", flashlight.Position);
-    _shader.SetVec2("bubbleStretch", flashlight.Stretch);
+    // Stretch vive em coords de janela (Y pra baixo); o shader mede em gl_FragCoord
+    // (Y pra cima). Sem inverter o Y aqui a bolha balanca numa direcao espelhada.
+    _shader.SetVec2("bubbleStretch", new Vector2(flashlight.Stretch.X, -flashlight.Stretch.Y));
     _shader.SetFloat("bubbleSqueeze", flashlight.Squeeze);
     _shader.SetInt("flEnabled", flashlight.IsEnabled ? 1 : 0);
+
+    _shader.SetInt("blurBackground", config.BlurBackground ? 1 : 0);
+    _shader.SetFloat("backgroundBlurRadius", config.BackgroundBlurRadius);
+    _shader.SetInt("blurOutsideFl", config.BlurOutsideFlashlight ? 1 : 0);
+    _shader.SetFloat("outsideFlBlurRadius", config.OutsideFlashlightBlurRadius);
 
     _gl.BindVertexArray(_vao);
     _gl.DrawElements(PrimitiveType.Triangles, 6, DrawElementsType.UnsignedInt, (void*)0);
