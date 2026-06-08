@@ -5,6 +5,7 @@ using Coomer.Features.Capture;
 using Coomer.Features.Configuration;
 using Coomer.Features.Lighting;
 using Coomer.App;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Coomer.Features.Input;
 
@@ -20,6 +21,7 @@ public sealed class InputHandler
   private readonly Screenshot _screenshot;
   private readonly string _configPath;
   private readonly float _frameRate;
+  private readonly ColorPicker _picker;
 
   private Mouse _mouse;
   private bool _ctrl;
@@ -29,9 +31,11 @@ public sealed class InputHandler
   public bool Mirror { get; private set; }
   public Vector2 CursorPosition => _mouse.Current;
   public bool Dragging => _mouse.Drag;
+  public ColorPicker Picker => _picker;
 
   public InputHandler(IInputContext input, Camera camera, Flashlight flashlight,
-                      Config config, Screenshot screenshot, string configPath, float frameRate)
+                      Config config, Screenshot screenshot, string configPath,
+                      float frameRate, ColorPicker picker)
   {
     _camera = camera;
     _flashlight = flashlight;
@@ -39,6 +43,7 @@ public sealed class InputHandler
     _screenshot = screenshot;
     _configPath = configPath;
     _frameRate = frameRate;
+    _picker = picker;
 
     foreach (var keyboard in input.Keyboards)
     {
@@ -110,6 +115,13 @@ public sealed class InputHandler
         _flashlight.IsEnabled = !_flashlight.IsEnabled;
         break;
 
+      case Key.C:
+      case Key.P:
+        _picker.IsEnabled = !_picker.IsEnabled;
+        if (_picker.IsEnabled && _flashlight.IsEnabled)
+          _flashlight.IsEnabled = false; // picker e lanterna sao mutuamente exclusivos
+        break;
+
       case Key.H:
       case Key.Left:
         _camera.Pan(new Vector2(-_config.CameraPanAmount, 0));
@@ -163,6 +175,16 @@ public sealed class InputHandler
 
   private void OnMouseDown(IMouse mouse, MouseButton button)
   {
+    if (button == MouseButton.Left && _picker.IsEnabled)
+    {
+      string hex = _picker.PickAt(_mouse.Current, _camera, _screenshot,
+                                   new Vector2(_screenshot.Width, _screenshot.Height));
+      _picker.LastHex = hex;
+      _picker.IsEnabled = false;
+      TryCopyToClipboard(hex);
+      return;
+    }
+
     if (button == MouseButton.Left)
     {
       _mouse.Previous = _mouse.Current;
@@ -214,5 +236,28 @@ public sealed class InputHandler
       _camera.DeltaScale -= _config.ScrollSpeed;
       _camera.ScalePivot = _mouse.Current;
     }
+  }
+
+  // STA-free: pipa o texto pro "clip" do Windows via cmd. Zero deps,
+  // e nao precisa de [STAThread] (necessario para Clipboard.SetText).
+  private static void TryCopyToClipboard(string text)
+  {
+    try
+    {
+      var psi = new System.Diagnostics.ProcessStartInfo("cmd.exe", "/c clip")
+      {
+        RedirectStandardInput = true,
+        UseShellExecute = false,
+        CreateNoWindow = true,
+      };
+      using var p = System.Diagnostics.Process.Start(psi);
+      if (p != null)
+      {
+        p.StandardInput.Write(text);
+        p.StandardInput.Close();
+        p.WaitForExit(500);
+      }
+    }
+    catch { /* best-effort: se falhar, o LastHex ainda fica disponivel */ }
   }
 }

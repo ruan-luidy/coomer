@@ -77,4 +77,14 @@ public sealed unsafe class Screenshot
 
     return new Screenshot(x, y, w, h, pixels);
   }
+
+  /// <summary>Pega o pixel em (x,y) e devolve "#RRGGBB". Layout BGRA top-down.</summary>
+  public string GetPixelHex(int x, int y)
+  {
+    int i = (y * Width + x) * 4;
+    byte b = Pixels[i + 0];
+    byte g = Pixels[i + 1];
+    byte r = Pixels[i + 2];
+    return $"#{r:X2}{g:X2}{b:X2}";
+  }
 }
