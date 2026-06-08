@@ -1,24 +1,3 @@
-// SUBSTITUI: coomer/Shaders/frag.glsl
-//
-// FASES NESTE ARQUIVO: Fase 2 + Fase 3.
-//
-// Diffs vs. original:
-//
-// [Fase 2]
-//   + uniforms: bubblePos, bubbleStretch, bubbleSqueeze, flEnabled
-//   + helper  : bubbleDist (distancia "elipsoidal" estica/comprime)
-//   ~ main    : centro do circulo passa a usar bubblePos em vez do cursor cru,
-//               e a distancia usa bubbleDist (deformacao).
-//
-// [Fase 3]
-//   + uniforms: blurBackground, backgroundBlurRadius,
-//               blurOutsideFl, outsideFlBlurRadius
-//   + helper  : boxBlur (9x9 = 81 taps, naive)
-//   ~ main    : pode pegar cor "borrada" pro fundo ou pro anel fora da lanterna.
-//
-// O comportamento original (mix preto controlado por flShadow) e preservado
-// quando flEnabled=false ou flShadow~0.
-
 #version 130
 out mediump vec4 color;
 in mediump vec2 texcoord;

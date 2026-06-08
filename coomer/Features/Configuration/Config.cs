@@ -19,7 +19,7 @@ public sealed class Config
   public float CameraRecenterLerpSpeed { get; set; } = 6.0f;
   public bool HideCursorOnFlashlight { get; set; } = true;
 
-  // Falshligh com fisica de bolha (mola + amortecimento + deformacao).
+  // Flashlight com fisica de bolha (mola + amortecimento + deformacao).
   public float BubbleMass { get; set; } = 1.0f;
   public float BubbleSpringK { get; set; } = 80.0f;
   public float BubbleDamping { get; set; } = 8.0f;

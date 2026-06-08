@@ -5,7 +5,6 @@ using Coomer.Features.Capture;
 using Coomer.Features.Configuration;
 using Coomer.Features.Lighting;
 using Coomer.App;
-using System.Diagnostics.CodeAnalysis;
 
 namespace Coomer.Features.Input;
 

@@ -1,5 +1,4 @@
 using Coomer.Features.Configuration;
-using Silk.NET.GLFW;
 using System.Numerics;
 
 namespace Coomer.Features.Lighting;
@@ -68,12 +67,12 @@ public sealed class Flashlight
       Squeeze = 0f;
     }
 
-    // raio anima ate o alov
+    // raio anima ate o alvo
     Radius += (TargetRadius - Radius) * MathF.Min(1.0f, 8.0f * dt);
 
     // Sombra cresce/diminui
-      Shadow = IsEnabled
-        ? MathF.Min(Shadow + 6.0f * dt, 0.8f)
-        : MathF.Max(Shadow - 6.0f * dt, 0.0f);
+    Shadow = IsEnabled
+      ? MathF.Min(Shadow + 6.0f * dt, 0.8f)
+      : MathF.Max(Shadow - 6.0f * dt, 0.0f);
   }
 }
