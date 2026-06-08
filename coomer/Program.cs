@@ -33,7 +33,7 @@ new HotkeyHost().Run(onShow: () =>
     try { config = File.Exists(configPath) ? Config.Load(configPath) : Config.Default(); }
     catch { config = Config.Default(); }
 
-    new BoomerApp(config, configPath).Run();
+    new CoomerApp(config, configPath).Run();
   }
   catch
   {

@@ -16,7 +16,7 @@ namespace Coomer.App;
 /// Host da aplicacao: cria a janela borderless/topmost cobrindo a tela, abre o
 /// contexto GL e roda o loop. E o equivalente ao <c>main()</c> de boomer.nim.
 /// </summary>
-public sealed class BoomerApp
+public sealed class CoomerApp
 {
   private readonly Config _config;
   private readonly string _configPath;
@@ -34,7 +34,7 @@ public sealed class BoomerApp
   private int _frames;
   private bool _shown;
 
-  public BoomerApp(Config config, string configPath)
+  public CoomerApp(Config config, string configPath)
   {
     _config = config;
     _configPath = configPath;
@@ -99,6 +99,7 @@ public sealed class BoomerApp
     // pixel a pixel com o desktop e nao deslocar a imagem.
     var windowSize = new Vector2(_screenshot.Width, _screenshot.Height);
 
+    _handler.Tick();
     _camera.Update(_config, dt, _handler.Dragging, windowSize);
     _flashlight.Update(dt);
 
@@ -139,6 +140,7 @@ public sealed class BoomerApp
   // o GLFW reusa o handle da janela e o Silk crasha com "More than one input context".
   private void OnClosing()
   {
+    _handler?.RestoreCursor();
     _renderer?.Dispose();
     _input?.Dispose();
   }
