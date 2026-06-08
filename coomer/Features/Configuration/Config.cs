@@ -20,16 +20,20 @@ public sealed class Config
   public bool HideCursorOnFlashlight { get; set; } = true;
 
   // Flashlight com fisica de bolha (mola + amortecimento + deformacao).
-  // damping baixo em relacao ao spring (zeta ~ 0.15) deixa a bolha wobblar ao
-  // parar; stretch_factor multiplica direto a magnitude da velocidade entao
-  // valores tipo 0.0001 (do zoomer original) ficam imperceptiveis aqui — o
-  // valor abaixo da uma esticada bem visivel no movimento normal de mouse.
+  // Mesmos defaults do zoomer original — calibrados pra parecer natural com
+  // a conta correta de elipse no shader.
   public float BubbleMass { get; set; } = 1.0f;
-  public float BubbleSpringK { get; set; } = 90.0f;
-  public float BubbleDamping { get; set; } = 3.0f;
-  public float BubbleStretchFactor { get; set; } = 0.0025f;
-  public float BubbleSqueezeFactor { get; set; } = 0.6f;
-  public float BubbleDeformSmoothing { get; set; } = 12.0f;
+  public float BubbleSpringK { get; set; } = 80.0f;
+  public float BubbleDamping { get; set; } = 8.0f;
+  public float BubbleStretchFactor { get; set; } = 0.0001f;
+  public float BubbleSqueezeFactor { get; set; } = 0.5f;
+  public float BubbleDeformSmoothing { get; set; } = 8.0f;
+
+  // Blur do fundo (toda a tela atras do zoom) e blur fora da lanterna.
+  public bool BlurBackground { get; set; } = false;
+  public float BackgroundBlurRadius { get; set; } = 6.0f;
+  public bool BlurOutsideFlashlight { get; set; } = false;
+  public float OutsideFlashlightBlurRadius { get; set; } = 6.0f;
 
   public static Config Default() => new();
 
@@ -70,6 +74,11 @@ public sealed class Config
         case "bubble_squeeze_factor": config.BubbleSqueezeFactor = ParseFloat(value); break;
         case "bubble_deform_smoothing": config.BubbleDeformSmoothing = ParseFloat(value); break;
 
+        case "blur_background": config.BlurBackground = ParseBool(value); break;
+        case "background_blur_radius": config.BackgroundBlurRadius = ParseFloat(value); break;
+        case "blur_outside_flashlight": config.BlurOutsideFlashlight = ParseBool(value); break;
+        case "outside_flashlight_blur_radius": config.OutsideFlashlightBlurRadius = ParseFloat(value); break;
+
         default: throw new InvalidDataException($"Chave de config desconhecida `{key}`");
       }
     }
@@ -96,6 +105,11 @@ public sealed class Config
     BubbleStretchFactor = fresh.BubbleStretchFactor;
     BubbleSqueezeFactor = fresh.BubbleSqueezeFactor;
     BubbleDeformSmoothing = fresh.BubbleDeformSmoothing;
+
+    BlurBackground = fresh.BlurBackground;
+    BackgroundBlurRadius = fresh.BackgroundBlurRadius;
+    BlurOutsideFlashlight = fresh.BlurOutsideFlashlight;
+    OutsideFlashlightBlurRadius = fresh.OutsideFlashlightBlurRadius;
   }
 
   public void Save(string path)
@@ -122,6 +136,11 @@ public sealed class Config
     w.WriteLine($"bubble_stretch_factor = {BubbleStretchFactor.ToString(c)}");
     w.WriteLine($"bubble_squeeze_factor = {BubbleSqueezeFactor.ToString(c)}");
     w.WriteLine($"bubble_deform_smoothing = {BubbleDeformSmoothing.ToString(c)}");
+
+    w.WriteLine($"blur_background = {(BlurBackground ? "true" : "false")}");
+    w.WriteLine($"background_blur_radius = {BackgroundBlurRadius.ToString(c)}");
+    w.WriteLine($"blur_outside_flashlight = {(BlurOutsideFlashlight ? "true" : "false")}");
+    w.WriteLine($"outside_flashlight_blur_radius = {OutsideFlashlightBlurRadius.ToString(c)}");
   }
 
   private static float ParseFloat(string s) => float.Parse(s, CultureInfo.InvariantCulture);
