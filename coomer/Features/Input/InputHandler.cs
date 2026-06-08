@@ -66,10 +66,10 @@ public sealed class InputHandler
         Mirror = false;
         break;
 
-      case Key.Q:
-      case Key.Escape:
-        Quitting = true;
-        break;
+      // Q/Esc fecham o overlay no KeyUp (ver OnKeyUp), nao aqui: se fechasse no KeyDown e
+      // o usuario segurasse a tecla, o auto-repeat do Windows mandaria os KeyDown seguintes
+      // pra janela de baixo (ex.: um video em fullscreen), que sairia do fullscreen. Mantendo
+      // o overlay vivo ate soltar, o coomer consome todos os eventos e nada vaza.
 
       case Key.R:
         if (File.Exists(_configPath))
@@ -101,6 +101,8 @@ public sealed class InputHandler
   {
     if (key is Key.ControlLeft or Key.ControlRight)
       _ctrl = false;
+    else if (key is Key.Q or Key.Escape)
+      Quitting = true;
   }
 
   private void OnMouseMove(IMouse mouse, Vector2 position)
