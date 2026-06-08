@@ -41,10 +41,12 @@ vec4 boxBlur(vec2 uv, float radius)
 }
 // =====================================================================
 
-// ====================== Fase 2: helper bubbleDist ======================
-// Distancia ate o centro, mas projetada em base (dir, perp): estica ao
-// longo de Stretch e comprime perpendicular por Squeeze. Sem stretch
-// vira length(p - center) — o circulo normal.
+// Distancia "elipsoidal" usada pra desenhar a bolha. Compara direto com flRadius.
+// Math equivalente ao sdfEllipse do zoomer:
+//   semi-eixo na direcao do stretch CRESCE (1+sl)  -> bubble estica nessa direcao
+//   semi-eixo perpendicular         DIMINUI (1-sq) -> bubble comprime perpendicular
+//   distancia normalizada = sqrt((along/a)^2 + (across/b)^2)
+// Sem stretch, a=b=1 e a expressao colapsa pra length(p - center) — circulo.
 float bubbleDist(vec2 p, vec2 center, vec2 stretch, float squeeze)
 {
     vec2 d = p - center;
@@ -54,14 +56,10 @@ float bubbleDist(vec2 p, vec2 center, vec2 stretch, float squeeze)
     vec2 perp = vec2(-dir.y, dir.x);
     float along = dot(d, dir);
     float across = dot(d, perp);
-    // kAlong < 1 estica (divide along), kAcross > 1 comprime (multiplica across).
-    // teto de 0.75 deixa o eixo longo do "ovo" chegar a ~4x (1/0.25) — chega a
-    // parecer uma gota sendo puxada quando o movimento e brusco.
-    float kAlong = 1.0 - clamp(sl, 0.0, 0.75);
-    float kAcross = 1.0 + clamp(squeeze, 0.0, 0.75);
-    return length(vec2(along / kAlong, across * kAcross));
+    float a = clamp(1.0 + sl, 0.5, 2.0);          // estica
+    float b = clamp(1.0 - squeeze, 0.3, 1.5);     // comprime
+    return length(vec2(along / a, across / b));
 }
-// ========================================================================
 
 void main()
 {
