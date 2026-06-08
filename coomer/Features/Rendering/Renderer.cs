@@ -1,6 +1,7 @@
 using System.Numerics;
 using Silk.NET.OpenGL;
 using Coomer.Features.Capture;
+using Coomer.Features.Configuration;
 using Coomer.Features.Navigation;
 using Coomer.Features.Lighting;
 
@@ -84,7 +85,7 @@ public sealed unsafe class Renderer : IDisposable
     _shader.SetInt("tex", 0);
   }
 
-  public void Draw(Camera camera, Flashlight flashlight,
+  public void Draw(Camera camera, Flashlight flashlight, Config config,
                    bool mirror, Vector2 windowSize, Vector2 cursor)
   {
     _gl.ClearColor(0.1f, 0.1f, 0.1f, 1.0f);
@@ -99,6 +100,11 @@ public sealed unsafe class Renderer : IDisposable
     _shader.SetFloat("flShadow", flashlight.Shadow);
     _shader.SetFloat("flRadius", flashlight.Radius);
     _shader.SetInt("mirror", mirror ? 1 : 0);
+
+    _shader.SetVec2("bubblePos", flashlight.Position);
+    _shader.SetVec2("bubbleStretch", flashlight.Stretch);
+    _shader.SetFloat("bubbleSqueeze", flashlight.Squeeze);
+    _shader.SetInt("flEnabled", flashlight.IsEnabled ? 1 : 0);
 
     _gl.BindVertexArray(_vao);
     _gl.DrawElements(PrimitiveType.Triangles, 6, DrawElementsType.UnsignedInt, (void*)0);
