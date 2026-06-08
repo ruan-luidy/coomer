@@ -54,8 +54,11 @@ float bubbleDist(vec2 p, vec2 center, vec2 stretch, float squeeze)
     vec2 perp = vec2(-dir.y, dir.x);
     float along = dot(d, dir);
     float across = dot(d, perp);
-    float kAlong = 1.0 - clamp(sl * 0.5, 0.0, 0.5);   // estica
-    float kAcross = 1.0 + clamp(squeeze, 0.0, 0.5);   // comprime
+    // kAlong < 1 estica (divide along), kAcross > 1 comprime (multiplica across).
+    // teto de 0.75 deixa o eixo longo do "ovo" chegar a ~4x (1/0.25) — chega a
+    // parecer uma gota sendo puxada quando o movimento e brusco.
+    float kAlong = 1.0 - clamp(sl, 0.0, 0.75);
+    float kAcross = 1.0 + clamp(squeeze, 0.0, 0.75);
     return length(vec2(along / kAlong, across * kAcross));
 }
 // ========================================================================

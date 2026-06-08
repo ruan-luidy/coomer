@@ -20,12 +20,16 @@ public sealed class Config
   public bool HideCursorOnFlashlight { get; set; } = true;
 
   // Flashlight com fisica de bolha (mola + amortecimento + deformacao).
+  // damping baixo em relacao ao spring (zeta ~ 0.15) deixa a bolha wobblar ao
+  // parar; stretch_factor multiplica direto a magnitude da velocidade entao
+  // valores tipo 0.0001 (do zoomer original) ficam imperceptiveis aqui — o
+  // valor abaixo da uma esticada bem visivel no movimento normal de mouse.
   public float BubbleMass { get; set; } = 1.0f;
-  public float BubbleSpringK { get; set; } = 80.0f;
-  public float BubbleDamping { get; set; } = 8.0f;
-  public float BubbleStretchFactor { get; set; } = 0.0001f;
-  public float BubbleSqueezeFactor { get; set; } = 0.5f;
-  public float BubbleDeformSmoothing { get; set; } = 8.0f;
+  public float BubbleSpringK { get; set; } = 90.0f;
+  public float BubbleDamping { get; set; } = 3.0f;
+  public float BubbleStretchFactor { get; set; } = 0.0025f;
+  public float BubbleSqueezeFactor { get; set; } = 0.6f;
+  public float BubbleDeformSmoothing { get; set; } = 12.0f;
 
   public static Config Default() => new();
 
