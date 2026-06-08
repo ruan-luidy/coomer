@@ -25,6 +25,19 @@ string configPath = Path.Combine(configDir, "config");
 // tela e recarregando a config na hora); Ctrl+Alt+Q encerra. q/ESC fecha so o overlay.
 new HotkeyHost().Run(onShow: () =>
 {
-  var config = File.Exists(configPath) ? Config.Load(configPath) : Config.Default();
-  new BoomerApp(config, configPath).Run();
+  try
+  {
+    // Config quebrada (linha invalida / chave desconhecida) nao deve impedir o overlay
+    // de abrir — cai pro default em vez de lancar.
+    Config config;
+    try { config = File.Exists(configPath) ? Config.Load(configPath) : Config.Default(); }
+    catch { config = Config.Default(); }
+
+    new BoomerApp(config, configPath).Run();
+  }
+  catch
+  {
+    // Qualquer falha ao abrir/rodar o overlay (captura, GL, etc.) nao pode derrubar o
+    // processo residente; o usuario so tenta de novo no proximo Ctrl+Alt+Z.
+  }
 });
