@@ -29,6 +29,7 @@ public sealed class CoomerApp
   private InputHandler _handler = null!;
   private Camera _camera = null!;
   private Flashlight _flashlight = null!;
+  private ColorPicker _picker = null!;
   private float _frameRate = 60f;
   private nint _hwnd;
   private int _frames;
@@ -82,8 +83,10 @@ public sealed class CoomerApp
 
     _camera = new Camera(new Vector2(_screenshot.Width, _screenshot.Height));
     _flashlight = new Flashlight();
+    _picker = new ColorPicker();
     _renderer = new Renderer(_gl, _screenshot);
-    _handler = new InputHandler(_input, _camera, _flashlight, _config, _screenshot, _configPath, _frameRate);
+    _handler = new InputHandler(_input, _camera, _flashlight, _config, _screenshot, 
+                                _configPath, _frameRate, _picker);
 
     if (_window.Native?.Win32 is { } win32)
       _hwnd = win32.Hwnd;
@@ -99,9 +102,9 @@ public sealed class CoomerApp
     // pixel a pixel com o desktop e nao deslocar a imagem.
     var windowSize = new Vector2(_screenshot.Width, _screenshot.Height);
 
-    _handler.Tick();
+    _handler.Tick(); // sincroniza estado do cursor (hide/show com flashlight)
     _camera.Update(_config, dt, _handler.Dragging, windowSize);
-    _flashlight.Update(dt);
+    _flashlight.Update(_config, dt, _handler.CursorPosition);
 
     if (_handler.Quitting)
       _window.Close();
@@ -119,7 +122,7 @@ public sealed class CoomerApp
     }
 
     var windowSize = new Vector2(_screenshot.Width, _screenshot.Height);
-    _renderer.Draw(_camera, _flashlight, _handler.Mirror, windowSize, _handler.CursorPosition);
+    _renderer.Draw(_camera, _flashlight, _config, _handler.Mirror, windowSize, _handler.CursorPosition);
     _frames++;
   }
 
