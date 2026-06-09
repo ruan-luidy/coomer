@@ -24,11 +24,13 @@ public sealed unsafe class Renderer : IDisposable
   private readonly uint _texture;
   private readonly int _imageWidth;
   private readonly int _imageHeight;
+  private readonly Screenshot _screenshot;
   private readonly StrokeRenderer _strokes;
 
   public Renderer(GL gl, Screenshot screenshot)
   {
     _gl = gl;
+    _screenshot = screenshot;
     _imageWidth = screenshot.Width;
     _imageHeight = screenshot.Height;
 
@@ -127,9 +129,9 @@ public sealed unsafe class Renderer : IDisposable
     _gl.DrawElements(PrimitiveType.Triangles, 6, DrawElementsType.UnsignedInt, (void*)0);
 
     // Tracos por cima de tudo (inclusive da sombra da lanterna) — pra ficarem
-    // visiveis mesmo no modo flashlight.
-    _strokes.Draw(drawTool, camera, mirror, windowSize,
-                  new Vector2(_imageWidth, _imageHeight));
+    // visiveis mesmo no modo flashlight. Tambem desenha o ringue do brush no
+    // cursor pra o usuario ver o tamanho do pincel.
+    _strokes.Draw(drawTool, camera, mirror, windowSize, _screenshot, cursor);
   }
 
   public void Dispose()
