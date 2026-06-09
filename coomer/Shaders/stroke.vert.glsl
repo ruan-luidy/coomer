@@ -7,7 +7,7 @@ uniform vec2 windowSize;
 uniform vec2 screenshotSize;
 uniform bool mirror;
 
-// Mesma conta do vert.glsl da screenshot — mantem o desenho perfeitamente
+// Mesma conta do vert.glsl da screenshot ï¿½ mantem o desenho perfeitamente
 // alinhado com a imagem em qualquer zoom/pan.
 vec2 to_world(vec2 v) {
     vec2 ratio = vec2(
@@ -23,5 +23,11 @@ void main()
     // reaplicamos o flip pra acompanhar a renderizacao espelhada da screenshot.
     vec2 p = aPos;
     if (mirror) p.x = screenshotSize.x - p.x;
+    // Pontos do traco vivem em coord de imagem Y-down (Y=0 topo da foto). O
+    // to_world abaixo, igual ao do screenshot quad, e Y-up (Y=0 base do clip)
+    // â€” la a textura BGRA top-down do BitBlt compensa por causa do flip que o
+    // GL faz no upload. Aqui nao tem textura pra compensar, entao flipamos a
+    // mao; sem isso o desenho sai de cabeca pra baixo.
+    p.y = screenshotSize.y - p.y;
     gl_Position = vec4(to_world(p - cameraPos * vec2(1.0, -1.0)), 0.0, 1.0);
 }
