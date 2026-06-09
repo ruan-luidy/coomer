@@ -16,3 +16,6 @@ publish-*/
 
 # release assets
 *.zip
+
+# Claude Code local config
+.claude/

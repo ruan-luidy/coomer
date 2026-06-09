@@ -1,0 +1,128 @@
+using System.Diagnostics;
+using System.Numerics;
+using Coomer.Features.Capture;
+using Coomer.Features.Navigation;
+
+namespace Coomer.Features.Drawing;
+
+/// <summary>
+/// Estado do modo de desenho. Quando ativo, o left-drag deixa de panar e vira
+/// pincel/linha/retangulo. Tracos sao guardados em coords de imagem (pixel da
+/// screenshot), com mirror "desfeito" no clique e refeito no shader — assim
+/// o desenho fica preso ao conteudo independente do estado do espelho.
+/// </summary>
+public sealed class DrawTool
+{
+  // Paleta minima: bem saturada pra contrastar com a foto por baixo.
+  private static readonly Vector4[] Palette =
+  {
+    new(1.00f, 0.20f, 0.20f, 1f), // vermelho
+    new(1.00f, 0.85f, 0.20f, 1f), // amarelo
+    new(0.25f, 1.00f, 0.40f, 1f), // verde
+    new(0.30f, 0.70f, 1.00f, 1f), // azul
+    new(1.00f, 0.40f, 1.00f, 1f), // magenta
+    new(1.00f, 1.00f, 1.00f, 1f), // branco
+    new(0.00f, 0.00f, 0.00f, 1f), // preto
+  };
+
+  public bool IsEnabled;
+  public DrawShape Shape = DrawShape.Free;
+  public int ColorIndex;
+  /// <summary>Espessura em pixels de imagem.</summary>
+  public float Thickness = 4f;
+  public readonly List<Stroke> Strokes = new();
+
+  private Stroke? _active;
+  private readonly OneEuroFilterV2 _filter = new();
+  private readonly Stopwatch _watch = new();
+
+  public Vector4 CurrentColor => Palette[ColorIndex];
+
+  public void Begin(Vector2 cursorScreen, Vector2 windowSize, Screenshot shot,
+                    Camera camera, bool mirror)
+  {
+    _filter.Reset();
+    _watch.Restart();
+    // Primeira amostra: passa direto (filtro inicializa nesse ponto sem lag).
+    var smoothed = _filter.Step(cursorScreen, 1f / 120f);
+    var p = ScreenToImage(smoothed, windowSize, shot, camera, mirror);
+    _active = new Stroke
+    {
+      Shape = Shape,
+      Color = CurrentColor,
+      Thickness = Thickness,
+    };
+    _active.Points.Add(p);
+    Strokes.Add(_active);
+  }
+
+  public void Move(Vector2 cursorScreen, Vector2 windowSize, Screenshot shot,
+                   Camera camera, bool mirror)
+  {
+    if (_active == null) return;
+
+    float dt = (float)_watch.Elapsed.TotalSeconds;
+    _watch.Restart();
+    if (dt <= 0f) dt = 1f / 120f;
+
+    var smoothed = _filter.Step(cursorScreen, dt);
+    var p = ScreenToImage(smoothed, windowSize, shot, camera, mirror);
+
+    if (_active.Shape == DrawShape.Free)
+    {
+      // Em coords de imagem 0.5px e nada — descarta pontos colados pra nao inchar
+      // o buffer com microamostras do mouse de 1000Hz.
+      if (Vector2.DistanceSquared(_active.Points[^1], p) < 0.25f) return;
+      _active.Points.Add(p);
+    }
+    else
+    {
+      // Linha/retangulo: so 2 pontos (inicio + arrasto atual).
+      if (_active.Points.Count < 2) _active.Points.Add(p);
+      else _active.Points[1] = p;
+    }
+  }
+
+  public void End() => _active = null;
+
+  public void Undo()
+  {
+    if (Strokes.Count == 0) return;
+    Strokes.RemoveAt(Strokes.Count - 1);
+    _active = null;
+  }
+
+  public void Clear()
+  {
+    Strokes.Clear();
+    _active = null;
+  }
+
+  public void CycleShape()
+  {
+    Shape = Shape switch
+    {
+      DrawShape.Free => DrawShape.Line,
+      DrawShape.Line => DrawShape.Rect,
+      _ => DrawShape.Free,
+    };
+  }
+
+  public void CycleColor() => ColorIndex = (ColorIndex + 1) % Palette.Length;
+
+  public void ThicknessDelta(float d)
+    => Thickness = Math.Clamp(Thickness + d, 1f, 80f);
+
+  // Mesma conta do ColorPicker.PickAt, mas com unmirror: se o usuario clica
+  // na posicao de tela X enquanto a imagem esta espelhada, o pixel REAL da
+  // screenshot ali e (W - x). Guardamos canonico; o shader re-espelha.
+  private static Vector2 ScreenToImage(Vector2 cursor, Vector2 windowSize,
+                                       Screenshot shot, Camera camera, bool mirror)
+  {
+    var centered = cursor - windowSize * 0.5f;
+    var world = centered / camera.Scale;
+    var p = world + camera.Position + new Vector2(shot.Width, shot.Height) * 0.5f;
+    if (mirror) p.X = shot.Width - p.X;
+    return p;
+  }
+}
