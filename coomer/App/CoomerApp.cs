@@ -9,6 +9,7 @@ using Coomer.Features.Configuration;
 using Coomer.Features.Lighting;
 using Coomer.Features.Input;
 using Coomer.Features.Rendering;
+using Coomer.Features.Drawing;
 
 namespace Coomer.App;
 
@@ -30,6 +31,7 @@ public sealed class CoomerApp
   private Camera _camera = null!;
   private Flashlight _flashlight = null!;
   private ColorPicker _picker = null!;
+  private DrawTool _draw = null!;
   private float _frameRate = 60f;
   private nint _hwnd;
   private int _frames;
@@ -84,9 +86,10 @@ public sealed class CoomerApp
     _camera = new Camera(new Vector2(_screenshot.Width, _screenshot.Height));
     _flashlight = new Flashlight();
     _picker = new ColorPicker();
+    _draw = new DrawTool();
     _renderer = new Renderer(_gl, _screenshot);
-    _handler = new InputHandler(_input, _camera, _flashlight, _config, _screenshot, 
-                                _configPath, _frameRate, _picker);
+    _handler = new InputHandler(_input, _camera, _flashlight, _config, _screenshot,
+                                _configPath, _frameRate, _picker, _draw);
 
     if (_window.Native?.Win32 is { } win32)
       _hwnd = win32.Hwnd;
@@ -122,7 +125,8 @@ public sealed class CoomerApp
     }
 
     var windowSize = new Vector2(_screenshot.Width, _screenshot.Height);
-    _renderer.Draw(_camera, _flashlight, _config, _handler.Mirror, windowSize, _handler.CursorPosition);
+    _renderer.Draw(_camera, _flashlight, _config, _handler.Mirror, windowSize,
+                   _handler.CursorPosition, _draw);
     _frames++;
   }
 

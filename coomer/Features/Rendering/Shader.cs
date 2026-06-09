@@ -54,6 +54,7 @@ public sealed class Shader : IDisposable
   public void SetInt(string name, int value) => _gl.Uniform1(_gl.GetUniformLocation(Handle, name), value);
   public void SetFloat(string name, float value) => _gl.Uniform1(_gl.GetUniformLocation(Handle, name), value);
   public void SetVec2(string name, Vector2 v) => _gl.Uniform2(_gl.GetUniformLocation(Handle, name), v.X, v.Y);
+  public void SetVec4(string name, Vector4 v) => _gl.Uniform4(_gl.GetUniformLocation(Handle, name), v.X, v.Y, v.Z, v.W);
 
   public void Dispose() => _gl.DeleteProgram(Handle);
 }

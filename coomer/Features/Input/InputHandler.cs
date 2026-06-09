@@ -4,6 +4,7 @@ using Coomer.Features.Navigation;
 using Coomer.Features.Capture;
 using Coomer.Features.Configuration;
 using Coomer.Features.Lighting;
+using Coomer.Features.Drawing;
 using Coomer.App;
 
 namespace Coomer.Features.Input;
@@ -21,6 +22,7 @@ public sealed class InputHandler
   private readonly string _configPath;
   private readonly float _frameRate;
   private readonly ColorPicker _picker;
+  private readonly DrawTool _draw;
 
   private Mouse _mouse;
   private bool _ctrl;
@@ -31,10 +33,11 @@ public sealed class InputHandler
   public Vector2 CursorPosition => _mouse.Current;
   public bool Dragging => _mouse.Drag;
   public ColorPicker Picker => _picker;
+  public DrawTool Draw => _draw;
 
   public InputHandler(IInputContext input, Camera camera, Flashlight flashlight,
                       Config config, Screenshot screenshot, string configPath,
-                      float frameRate, ColorPicker picker)
+                      float frameRate, ColorPicker picker, DrawTool draw)
   {
     _camera = camera;
     _flashlight = flashlight;
@@ -43,6 +46,7 @@ public sealed class InputHandler
     _configPath = configPath;
     _frameRate = frameRate;
     _picker = picker;
+    _draw = draw;
 
     foreach (var keyboard in input.Keyboards)
     {
@@ -112,6 +116,7 @@ public sealed class InputHandler
 
       case Key.F:
         _flashlight.IsEnabled = !_flashlight.IsEnabled;
+        if (_flashlight.IsEnabled) _draw.IsEnabled = false;
         break;
 
       case Key.C:
@@ -119,6 +124,36 @@ public sealed class InputHandler
         _picker.IsEnabled = !_picker.IsEnabled;
         if (_picker.IsEnabled && _flashlight.IsEnabled)
           _flashlight.IsEnabled = false; // picker e lanterna sao mutuamente exclusivos
+        if (_picker.IsEnabled) _draw.IsEnabled = false;
+        break;
+
+      // ========= drawing =========
+      case Key.D:
+        _draw.IsEnabled = !_draw.IsEnabled;
+        if (_draw.IsEnabled)
+        {
+          // exclusivo com flashlight/picker — todos competem pelo left-click.
+          _flashlight.IsEnabled = false;
+          _picker.IsEnabled = false;
+        }
+        break;
+      case Key.S:
+        if (_draw.IsEnabled) _draw.CycleShape();
+        break;
+      case Key.Z:
+        if (_draw.IsEnabled) _draw.Undo();
+        break;
+      case Key.X:
+        if (_draw.IsEnabled) _draw.Clear();
+        break;
+      case Key.LeftBracket:
+        if (_draw.IsEnabled) _draw.ThicknessDelta(-1f);
+        break;
+      case Key.RightBracket:
+        if (_draw.IsEnabled) _draw.ThicknessDelta(+1f);
+        break;
+      case Key.Comma:
+        if (_draw.IsEnabled) _draw.CycleColor();
         break;
 
       case Key.H:
@@ -160,6 +195,14 @@ public sealed class InputHandler
   {
     _mouse.Current = position;
 
+    if (_draw.IsEnabled && _mouse.Drag)
+    {
+      _draw.Move(_mouse.Current, new Vector2(_screenshot.Width, _screenshot.Height),
+                 _screenshot, _camera, Mirror);
+      _mouse.Previous = _mouse.Current;
+      return;
+    }
+
     if (_mouse.Drag)
     {
       var delta = _camera.World(_mouse.Previous) - _camera.World(_mouse.Current);
@@ -184,6 +227,15 @@ public sealed class InputHandler
       return;
     }
 
+    if (button == MouseButton.Left && _draw.IsEnabled)
+    {
+      _mouse.Previous = _mouse.Current;
+      _mouse.Drag = true;
+      _draw.Begin(_mouse.Current, new Vector2(_screenshot.Width, _screenshot.Height),
+                  _screenshot, _camera, Mirror);
+      return;
+    }
+
     if (button == MouseButton.Left)
     {
       _mouse.Previous = _mouse.Current;
@@ -202,7 +254,10 @@ public sealed class InputHandler
   private void OnMouseUp(IMouse mouse, MouseButton button)
   {
     if (button == MouseButton.Left)
+    {
+      if (_draw.IsEnabled) _draw.End();
       _mouse.Drag = false;
+    }
   }
 
   private void OnScroll(IMouse mouse, ScrollWheel wheel)
@@ -217,6 +272,10 @@ public sealed class InputHandler
     {
       _flashlight.DeltaRadius += Flashlight.InitialDeltaRadius;
     }
+    else if (_ctrl && _draw.IsEnabled)
+    {
+      _draw.ThicknessDelta(+1f);
+    }
     else
     {
       _camera.DeltaScale += _config.ScrollSpeed;
@@ -229,6 +288,10 @@ public sealed class InputHandler
     if (_ctrl && _flashlight.IsEnabled)
     {
       _flashlight.DeltaRadius -= Flashlight.InitialDeltaRadius;
+    }
+    else if (_ctrl && _draw.IsEnabled)
+    {
+      _draw.ThicknessDelta(-1f);
     }
     else
     {

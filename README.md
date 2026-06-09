@@ -56,7 +56,22 @@ Inside the overlay:
 | `f`                                       | Toggle the flashlight effect             |
 | Drag with left mouse button               | Move the image around                    |
 | Scroll wheel or `=` / `-`                 | Zoom in/out                              |
-| `Ctrl` + Scroll wheel                     | Change the flashlight radius             |
+| `Ctrl` + Scroll wheel                     | Change the flashlight radius / pen thickness |
+
+Drawing mode (toggle with `d` — replaces left-drag panning with the pen):
+
+| Control                  | Description                                          |
+|--------------------------|------------------------------------------------------|
+| `d`                      | Toggle drawing mode (exclusive with flashlight/picker) |
+| `s`                      | Cycle shape: freehand → straight line → rectangle    |
+| `z`                      | Undo last stroke                                     |
+| `x`                      | Clear all strokes                                    |
+| `[` / `]`                | Decrease / increase pen thickness                    |
+| `,`                      | Cycle stroke color                                   |
+| Drag left mouse          | Draw (freehand smoothed, or shape from press to release) |
+
+Strokes are pinned to the image — they pan/zoom/mirror with the screenshot,
+and they live above the flashlight shadow so they stay visible.
 
 ## Configuration
 

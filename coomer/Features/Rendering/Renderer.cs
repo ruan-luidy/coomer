@@ -1,16 +1,18 @@
-using System.Numerics;
+﻿using System.Numerics;
 using Silk.NET.OpenGL;
 using Coomer.Features.Capture;
 using Coomer.Features.Configuration;
 using Coomer.Features.Navigation;
 using Coomer.Features.Lighting;
+using Coomer.Features.Drawing;
 
 namespace Coomer.Features.Rendering;
 
 /// <summary>
 /// Porte do setup de buffers/textura e do <c>draw</c> de boomer.nim.
 /// Desenha um unico quad texturizado com a screenshot; todo o zoom/lanterna/mirror
-/// acontece nos shaders.
+/// acontece nos shaders. Em seguida o <see cref="StrokeRenderer"/> joga os tracos
+/// do <see cref="DrawTool"/> por cima.
 /// </summary>
 public sealed unsafe class Renderer : IDisposable
 {
@@ -22,6 +24,7 @@ public sealed unsafe class Renderer : IDisposable
   private readonly uint _texture;
   private readonly int _imageWidth;
   private readonly int _imageHeight;
+  private readonly StrokeRenderer _strokes;
 
   public Renderer(GL gl, Screenshot screenshot)
   {
@@ -83,10 +86,12 @@ public sealed unsafe class Renderer : IDisposable
 
     _shader.Use();
     _shader.SetInt("tex", 0);
+
+    _strokes = new StrokeRenderer(gl);
   }
 
   public void Draw(Camera camera, Flashlight flashlight, Config config,
-                   bool mirror, Vector2 windowSize, Vector2 cursor)
+                   bool mirror, Vector2 windowSize, Vector2 cursor, DrawTool drawTool)
   {
     _gl.ClearColor(0.1f, 0.1f, 0.1f, 1.0f);
     _gl.Clear((uint)(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit));
@@ -120,6 +125,11 @@ public sealed unsafe class Renderer : IDisposable
 
     _gl.BindVertexArray(_vao);
     _gl.DrawElements(PrimitiveType.Triangles, 6, DrawElementsType.UnsignedInt, (void*)0);
+
+    // Tracos por cima de tudo (inclusive da sombra da lanterna) — pra ficarem
+    // visiveis mesmo no modo flashlight.
+    _strokes.Draw(drawTool, camera, mirror, windowSize,
+                  new Vector2(_imageWidth, _imageHeight));
   }
 
   public void Dispose()
@@ -129,5 +139,6 @@ public sealed unsafe class Renderer : IDisposable
     _gl.DeleteBuffer(_ebo);
     _gl.DeleteTexture(_texture);
     _shader.Dispose();
+    _strokes.Dispose();
   }
 }
