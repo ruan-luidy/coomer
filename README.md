@@ -1,21 +1,18 @@
 # coomer
 
-Zoomer application for Windows.
+Zoomer + annotation overlay for Windows.
 
-A C# port of [boomer](https://github.com/tsoding/boomer) by Tsoding, which is
-written in Nim for Linux/X11. `coomer` takes a screenshot of the monitor under
-the cursor and lets you zoom and pan around it, with an optional flashlight
-effect to highlight things.
-
-It runs resident in the background and pops the overlay on a global hotkey
-(`Ctrl+Alt+Z`), so it opens instantly without spinning up a new process each time.
+A C# port of [boomer](https://github.com/tsoding/boomer) by Tsoding (Nim,
+Linux/X11). `coomer` captures the monitor under the cursor and pops a zoom +
+annotation overlay on a global hotkey, then ducks back to the background. The
+process stays resident so the overlay opens instantly.
 
 ## Dependencies
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - A GPU supporting OpenGL 3.3+
 
-## Quick Start
+## Quick start
 
 ```console
 > dotnet run --project coomer
@@ -27,60 +24,72 @@ Build a self-contained release (runs without .NET installed):
 > dotnet publish coomer -c Release -r win-x64 -p:PublishAot=false --self-contained
 ```
 
-The output (a folder with `coomer.exe` and its dependencies) lives under
-`coomer/bin/Release/net10.0/win-x64/publish/`. Run `coomer.exe` once and it stays
-in the background waiting for the hotkey. Drop a shortcut to it in your Startup
-folder (`shell:startup`) to have it ready on every login.
+The output lives under `coomer/bin/Release/net10.0/win-x64/publish/`. Run
+`coomer.exe` once and it stays in the background. Drop a shortcut into
+`shell:startup` to have it ready every login.
 
-> For a small single-file binary, build with NativeAOT from a *Developer PowerShell
-> for VS* (`dotnet publish coomer -c Release -r win-x64`). The linker needs that
-> environment to be on PATH.
+> For a small single-file binary, build with NativeAOT from a *Developer
+> PowerShell for VS* (`dotnet publish coomer -c Release -r win-x64`). The
+> linker needs that environment on PATH.
 
 ## Controls
 
-Global hotkeys (work anywhere while coomer is running in the background):
+Global (work anywhere while coomer is running):
 
 | Hotkey         | Description                          |
 |----------------|--------------------------------------|
-| `Ctrl+Alt+Z`   | Open the zoom overlay                |
-| `Ctrl+Alt+Q`   | Quit coomer (stop the background app)|
+| `Ctrl+Alt+Z`   | Open the overlay                     |
+| `Ctrl+Alt+Q`   | Quit coomer                          |
 
 Inside the overlay:
 
-| Control                                   | Description                              |
-|-------------------------------------------|------------------------------------------|
-| `0`                                       | Reset position, scale and mirror         |
-| `q` or `Esc`                              | Close the overlay (coomer keeps running) |
-| `r`                                       | Reload configuration                     |
-| `m`                                       | Mirror the image                         |
-| `f`                                       | Toggle the flashlight effect             |
-| Drag with left mouse button               | Move the image around                    |
-| Scroll wheel or `=` / `-`                 | Zoom in/out                              |
-| `Ctrl` + Scroll wheel                     | Change the flashlight radius / pen thickness |
+| Control                            | Description                                  |
+|------------------------------------|----------------------------------------------|
+| `0`                                | Reset position, scale and mirror             |
+| `q` or `Esc`                       | Close the overlay (coomer keeps running)     |
+| `r`                                | Reload configuration                         |
+| `m`                                | Mirror the image                             |
+| `f`                                | Toggle flashlight                            |
+| `c` or `p`                         | Color picker (click a pixel → hex on clipboard) |
+| `b`                                | Region copy: drag a rect, release to copy as bitmap |
+| `Ctrl+S`                           | Save the annotated screen as BMP in `Pictures/` |
+| Drag left mouse                    | Pan                                          |
+| Scroll or `=` / `-`                | Zoom                                         |
+| `Ctrl` + scroll                    | Flashlight radius or pen thickness           |
+| `h` `j` `k` `l` / arrows           | Pan by keyboard                              |
 
-Drawing mode (toggle with `d` — replaces left-drag panning with the pen):
+### Drawing (`d` toggles)
 
-| Control                  | Description                                          |
-|--------------------------|------------------------------------------------------|
-| `d`                      | Toggle drawing mode (exclusive with flashlight/picker) |
-| `s`                      | Cycle shape: freehand → straight line → rectangle    |
-| `z`                      | Undo last stroke                                     |
-| `x`                      | Clear all strokes                                    |
-| `[` / `]`                | Decrease / increase pen thickness                    |
-| `,`                      | Cycle stroke color                                   |
-| Drag left mouse          | Draw (freehand smoothed, or shape from press to release) |
+In drawing mode left-drag draws instead of panning. Strokes are pinned to the
+image and stay above the flashlight shadow.
 
-Strokes are pinned to the image — they pan/zoom/mirror with the screenshot,
-and they live above the flashlight shadow so they stay visible.
+| Control                  | Description                                                    |
+|--------------------------|----------------------------------------------------------------|
+| `d`                      | Toggle drawing                                                 |
+| `s`                      | Cycle shape: free → line → arrow → rect → circle               |
+| Hold `Shift` while drag  | Snap line to 45°, force square / perfect circle                |
+| `t`                      | Toggle stamp mode (click drops a numbered badge)               |
+| `v`                      | Hide / show strokes + stamps (brush ring stays)                |
+| `z`                      | Undo last stroke / stamp                                       |
+| `x`                      | Clear everything                                               |
+| `[` / `]`                | Pen thickness − / +                                            |
+| `,`                      | Cycle pen color (also Ctrl + scroll for thickness)             |
+
+Picked colors stack as swatches in the bottom-right (last 8, LRU).
+
+#### Shape smarts
+
+- **Arrow** is freehand: drag anywhere — straight, curvy, swoosh — and an
+  arrowhead lands at the end pointing along your final stroke direction.
+- **Circle** drag is an axis-aligned ellipse inscribed in the bbox. Hold
+  `Shift` to lock it to a perfect circle.
+- **Free → auto-shape**: finish a rough closed scribble and it gets recognized
+  as a circle or ellipse (any orientation) and replaced by the clean version.
+  Fit is by PCA of the points; you can disable with `DrawTool.AutoCircle = false`.
 
 ## Configuration
 
-The config file lives at `%APPDATA%\coomer\config` with the format:
-
-```
-<param> = <value>
-# comment
-```
+`%APPDATA%\coomer\config`, plain `key = value`:
 
 | Name           | Description                                          |
 |----------------|------------------------------------------------------|
@@ -91,9 +100,13 @@ The config file lives at `%APPDATA%\coomer\config` with the format:
 | pan_inertia    | `false` = image stops with the mouse (no glide)      |
 | bubble_rigid   | `true` = flashlight snaps to cursor (no spring lerp/deform) |
 
+Press `r` inside the overlay to reload without restarting.
+
 ## Differences from boomer
 
 - Captures only the monitor under the cursor instead of the whole X screen.
 - Panning is clamped to the image bounds.
 - The flashlight radius is a fixed screen size (it does not grow with zoom).
 - Runs resident with a global hotkey instead of being launched per use.
+- Adds an annotation layer (pen, line, arrow, rect, circle/ellipse, numbered
+  stamps), a region-to-clipboard tool and a save-to-disk hotkey.
