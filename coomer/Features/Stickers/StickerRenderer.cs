@@ -39,7 +39,8 @@ public sealed unsafe class StickerRenderer : IDisposable
 
   public void DrawStamps(DrawTool tool, Camera camera, bool mirror, Vector2 windowSize,
                          Screenshot shot, Vector2 cursorScreen, StickerCache cache,
-                         StickerState state, Coomer.Features.Capture.RegionExporter? exporter)
+                         StickerState state, Coomer.Features.Capture.RegionExporter? exporter,
+                         Coomer.Features.Lighting.Flashlight flashlight)
   {
     bool hasSticker = !tool.Hide && tool.StickerStamps.Count > 0;
     bool wantsGhost = tool.IsEnabled && tool.StickerMode && state.Current != null;
@@ -64,6 +65,13 @@ public sealed unsafe class StickerRenderer : IDisposable
       _shader.SetVec2("invertMin", new Vector2(MathF.Min(a.X, b.X), MathF.Min(a.Y, b.Y)));
       _shader.SetVec2("invertMax", new Vector2(MathF.Max(a.X, b.X), MathF.Max(a.Y, b.Y)));
     }
+
+    _shader.SetInt("flEnabled", flashlight.IsEnabled ? 1 : 0);
+    _shader.SetFloat("flShadow", flashlight.Shadow);
+    _shader.SetFloat("flRadius", flashlight.Radius);
+    _shader.SetVec2("bubblePos", flashlight.Position);
+    _shader.SetVec2("bubbleStretch", new Vector2(flashlight.Stretch.X, -flashlight.Stretch.Y));
+    _shader.SetFloat("bubbleSqueeze", flashlight.Squeeze);
 
     _gl.BindVertexArray(_vao);
     _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _vbo);

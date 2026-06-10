@@ -136,7 +136,7 @@ public sealed unsafe class Renderer : IDisposable
     _gl.BindVertexArray(_vao);
     _gl.DrawElements(PrimitiveType.Triangles, 6, DrawElementsType.UnsignedInt, (void*)0);
 
-    _stickerRenderer.DrawStamps(drawTool, camera, mirror, windowSize, _screenshot, cursor, stickers, stickerState, exporter);
+    _stickerRenderer.DrawStamps(drawTool, camera, mirror, windowSize, _screenshot, cursor, stickers, stickerState, exporter, flashlight);
     _strokes.Draw(drawTool, camera, mirror, windowSize, _screenshot, cursor, history, exporter);
   }
 
