@@ -1,0 +1,106 @@
+﻿using System.Numerics;
+using Coomer.Features.Drawing;
+using Coomer.Features.Lighting;
+using Coomer.Features.Capture;
+using Coomer.Features.Stickers;
+using Coomer.Features.Text;
+
+namespace Coomer.Features.Hud;
+
+public sealed class HudRenderer
+{
+  private readonly TextRenderer _text;
+
+  public bool Visible = true;
+
+  public HudRenderer(TextRenderer text)
+  {
+    _text = text;
+  }
+
+  public void Draw(Vector2 windowSize, DrawTool draw, ColorPicker picker,
+                   RegionExporter exporter, StickerState stickerState)
+  {
+    if (!Visible) return;
+
+    const int size = 14;
+    var fg = new Vector4(0.95f, 0.95f, 0.95f, 0.95f);
+    var bg = new Vector4(0f, 0f, 0f, 0.55f);
+
+    string? line = BuildLine(draw, picker, exporter, stickerState);
+    if (line == null) return;
+
+    var (w, h) = _text.Measure(line, size);
+    float pad = 8f;
+    var pos = new Vector2(windowSize.X - w - pad - 6f, pad + 6f);
+
+    // sombra-fundo: desenha 4 deslocamentos do mesmo texto em preto pra fazer halo
+    foreach (var off in new[] { new Vector2(-1, 0), new Vector2(1, 0), new Vector2(0, -1), new Vector2(0, 1) })
+      _text.Draw(line, size, pos + off, windowSize, bg);
+
+    _text.Draw(line, size, pos, windowSize, fg);
+  }
+
+  private static string? BuildLine(DrawTool draw, ColorPicker picker,
+                                   RegionExporter exporter, StickerState stickerState)
+  {
+    if (exporter.Active) return "REGION COPY · arrasta pra selecionar";
+    if (picker.IsEnabled) return picker.LastHex.Length > 0 ? $"PICK · ultimo: {picker.LastHex}" : "PICK · click num pixel";
+    if (!draw.IsEnabled) return null;
+
+    if (draw.StickerMode)
+    {
+      if (draw.SelectedStickerIndex >= 0 && draw.SelectedStickerIndex < draw.StickerStamps.Count)
+      {
+        var sel = draw.StickerStamps[draw.SelectedStickerIndex];
+        var n = System.IO.Path.GetFileName(sel.Path);
+        float deg = sel.Rotation * 180f / MathF.PI;
+        return $"STICKER SEL · {n} · {(int)(sel.HalfSize * 2)}px · {(int)deg}°";
+      }
+      var cur = stickerState.Current;
+      var name = cur != null ? System.IO.Path.GetFileName(cur.Path) : "(vazio)";
+      var flag = draw.StickerMirror ? " <-> " : " ";
+      return $"STICKER ·{flag}{name} · {(int)draw.StickerSize}px";
+    }
+
+    if (draw.TextMode)
+    {
+      if (draw.ActiveText != null)
+      {
+        var preview = draw.ActiveText.Text.Length == 0 ? "(digite)" : draw.ActiveText.Text;
+        if (preview.Length > 32) preview = preview[..32] + "...";
+        return $"TEXTO · {preview} · {draw.TextFontSize}px";
+      }
+      return $"TEXTO · click pra comecar · {draw.TextFontSize}px";
+    }
+
+    if (draw.StampMode)
+      return $"STAMP # · proximo: {draw.NextStampNumber} · raio: {(int)(MathF.Max(12f, draw.Thickness * 2.5f))}px";
+
+    var shapeLabel = draw.Shape switch
+    {
+      DrawShape.Free => "pen",
+      DrawShape.Line => "linha",
+      DrawShape.Arrow => "seta",
+      DrawShape.Rect => "retangulo",
+      DrawShape.Circle => "circulo",
+      DrawShape.Highlighter => "marca-texto",
+      _ => "?",
+    };
+    string colorTag = ColorName(draw.ColorIndex);
+    return $"DRAW · {shapeLabel} · {colorTag} · {(int)draw.Thickness}px"
+         + (draw.Hide ? " · OCULTO" : "");
+  }
+
+  private static string ColorName(int idx) => idx switch
+  {
+    0 => "vermelho",
+    1 => "amarelo",
+    2 => "verde",
+    3 => "azul",
+    4 => "magenta",
+    5 => "branco",
+    6 => "preto",
+    _ => "?",
+  };
+}

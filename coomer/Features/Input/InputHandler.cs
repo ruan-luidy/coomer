@@ -5,6 +5,8 @@ using Coomer.Features.Capture;
 using Coomer.Features.Configuration;
 using Coomer.Features.Lighting;
 using Coomer.Features.Drawing;
+using Coomer.Features.Stickers;
+using Coomer.Features.Effects;
 using Coomer.App;
 
 namespace Coomer.Features.Input;
@@ -20,6 +22,9 @@ public sealed class InputHandler
   private readonly ColorPicker _picker;
   private readonly DrawTool _draw;
   private readonly RegionExporter _exporter;
+  private readonly StickerCache _stickers;
+  private readonly StickerState _stickerState;
+  private readonly RippleEffect _ripple;
 
   private Mouse _mouse;
   private bool _ctrl;
@@ -35,11 +40,14 @@ public sealed class InputHandler
   public ColorPicker Picker => _picker;
   public DrawTool Draw => _draw;
   public RegionExporter Exporter => _exporter;
+  public StickerState StickerState => _stickerState;
+  public RippleEffect Ripple => _ripple;
 
   public InputHandler(IInputContext input, Camera camera, Flashlight flashlight,
                       Config config, Screenshot screenshot, string configPath,
                       float frameRate, ColorPicker picker, DrawTool draw,
-                      RegionExporter exporter)
+                      RegionExporter exporter, StickerCache stickers, StickerState stickerState,
+                      RippleEffect ripple)
   {
     _camera = camera;
     _flashlight = flashlight;
@@ -50,11 +58,15 @@ public sealed class InputHandler
     _picker = picker;
     _draw = draw;
     _exporter = exporter;
+    _stickers = stickers;
+    _stickerState = stickerState;
+    _ripple = ripple;
 
     foreach (var keyboard in input.Keyboards)
     {
       keyboard.KeyDown += OnKeyDown;
       keyboard.KeyUp += OnKeyUp;
+      keyboard.KeyChar += OnKeyChar;
     }
     foreach (var mouse in input.Mice)
     {
@@ -111,6 +123,8 @@ public sealed class InputHandler
       case Key.R:
         if (File.Exists(_configPath))
           _config.Reload(_configPath);
+        _stickers.Reload();
+        _stickerState.RefreshFrom(_stickers);
         break;
 
       case Key.M:
@@ -150,10 +164,14 @@ public sealed class InputHandler
         if (_draw.IsEnabled) _draw.Clear();
         break;
       case Key.LeftBracket:
-        if (_draw.IsEnabled) _draw.ThicknessDelta(-1f);
+        if (_draw.IsEnabled && _draw.TextMode) _draw.TextFontSizeDelta(-2);
+        else if (_draw.IsEnabled && _draw.StickerMode) _draw.StickerSizeDelta(-8f);
+        else if (_draw.IsEnabled) _draw.ThicknessDelta(-1f);
         break;
       case Key.RightBracket:
-        if (_draw.IsEnabled) _draw.ThicknessDelta(+1f);
+        if (_draw.IsEnabled && _draw.TextMode) _draw.TextFontSizeDelta(+2);
+        else if (_draw.IsEnabled && _draw.StickerMode) _draw.StickerSizeDelta(+8f);
+        else if (_draw.IsEnabled) _draw.ThicknessDelta(+1f);
         break;
       case Key.Comma:
         if (_draw.IsEnabled) _draw.CycleColor();
@@ -162,7 +180,59 @@ public sealed class InputHandler
         if (_draw.IsEnabled) _draw.Hide = !_draw.Hide;
         break;
       case Key.T:
-        if (_draw.IsEnabled) _draw.StampMode = !_draw.StampMode;
+        if (_draw.IsEnabled) { _draw.StampMode = !_draw.StampMode; if (_draw.StampMode) _draw.StickerMode = false; }
+        break;
+      case Key.Y:
+        _draw.StickerMode = !_draw.StickerMode;
+        if (_draw.StickerMode)
+        {
+          _draw.IsEnabled = true;
+          _draw.StampMode = false;
+          _flashlight.IsEnabled = false;
+          _picker.IsEnabled = false;
+          if (_stickerState.Current == null) _stickerState.RefreshFrom(_stickers);
+        }
+        break;
+      case Key.Semicolon:
+      case Key.Tab:
+        if (_draw.IsEnabled && _draw.StickerMode)
+          _stickerState.CycleSticker(_stickers, _shift ? -1 : +1);
+        break;
+      case Key.Apostrophe:
+      case Key.GraveAccent:
+        if (_draw.IsEnabled && _draw.StickerMode)
+          _stickerState.CycleCategory(_stickers, _shift ? -1 : +1);
+        break;
+
+      case Key.W:
+        _draw.TextMode = !_draw.TextMode;
+        if (_draw.TextMode)
+        {
+          _draw.IsEnabled = true;
+          _draw.StampMode = false;
+          _draw.StickerMode = false;
+          _flashlight.IsEnabled = false;
+          _picker.IsEnabled = false;
+        }
+        else _draw.CancelActiveText();
+        break;
+      case Key.Enter:
+        if (_draw.TextMode) _draw.CommitActiveText();
+        break;
+      case Key.Backspace:
+        if (_draw.TextMode) _draw.TypeChar('\b');
+        break;
+      case Key.Q:
+        if (_draw.IsEnabled && _draw.StickerMode && _draw.SelectedStickerIndex >= 0)
+          _draw.RotateSelected(-MathF.PI / 18f * (_shift ? 3f : 1f));
+        break;
+      case Key.E:
+        if (_draw.IsEnabled && _draw.StickerMode && _draw.SelectedStickerIndex >= 0)
+          _draw.RotateSelected(MathF.PI / 18f * (_shift ? 3f : 1f));
+        break;
+      case Key.Delete:
+        if (_draw.IsEnabled && _draw.StickerMode && _draw.SelectedStickerIndex >= 0)
+          _draw.DeleteSelected();
         break;
 
       case Key.B:
@@ -175,6 +245,9 @@ public sealed class InputHandler
         break;
 
       case Key.H:
+        if (_draw.IsEnabled && _draw.StickerMode) { _draw.StickerMirror = !_draw.StickerMirror; break; }
+        _camera.Pan(new Vector2(-_config.CameraPanAmount, 0));
+        break;
       case Key.Left:
         _camera.Pan(new Vector2(-_config.CameraPanAmount, 0));
         break;
@@ -206,9 +279,11 @@ public sealed class InputHandler
     if (key is Key.ControlLeft or Key.ControlRight) _ctrl = false;
     else if (key is Key.ShiftLeft or Key.ShiftRight) _shift = false;
     else if (key is Key.Space) _space = false;
-    else if (key is Key.Q or Key.Escape)
+    else if (key is Key.Escape)
     {
       if (_exporter.Active) { _exporter.Cancel(); return; }
+      if (_draw.TextMode && _draw.ActiveText != null) { _draw.CancelActiveText(); return; }
+      if (_draw.IsEnabled && _draw.SelectedStickerIndex >= 0) { _draw.DeselectSticker(); return; }
       Quitting = true;
     }
   }
@@ -224,7 +299,14 @@ public sealed class InputHandler
       return;
     }
 
-    if (_draw.IsEnabled && !_draw.StampMode && _mouse.Drag && !_spacePan)
+    if (_draw.DraggingSticker && _mouse.Drag)
+    {
+      _draw.DragSticker(ScreenToImage(_mouse.Current));
+      _mouse.Previous = _mouse.Current;
+      return;
+    }
+
+    if (_draw.IsEnabled && !_draw.StampMode && !_draw.StickerMode && _mouse.Drag && !_spacePan)
     {
       _draw.Move(_mouse.Current, new Vector2(_screenshot.Width, _screenshot.Height),
                  _screenshot, _camera, Mirror);
@@ -261,10 +343,40 @@ public sealed class InputHandler
       return;
     }
 
+    if (button == MouseButton.Left && _draw.IsEnabled && _draw.TextMode && !_space)
+    {
+      _draw.BeginText(_mouse.Current, new Vector2(_screenshot.Width, _screenshot.Height),
+                      _screenshot, _camera, Mirror);
+      return;
+    }
+
+    if (button == MouseButton.Left && _draw.IsEnabled && _draw.StickerMode && !_space)
+    {
+      var cursorImg = ScreenToImage(_mouse.Current);
+      int hit = _draw.HitTestSticker(cursorImg, _stickers);
+      if (hit >= 0)
+      {
+        _draw.SelectSticker(hit);
+        _draw.BeginStickerDrag(cursorImg);
+        _mouse.Previous = _mouse.Current;
+        _mouse.Drag = true;
+        return;
+      }
+      _draw.DeselectSticker();
+      if (_stickerState.Current != null)
+      {
+        _draw.DropSticker(_mouse.Current, new Vector2(_screenshot.Width, _screenshot.Height),
+                          _screenshot, _camera, Mirror, _stickerState.Current.Path);
+        _ripple.Pop(_mouse.Current);
+      }
+      return;
+    }
+
     if (button == MouseButton.Left && _draw.IsEnabled && _draw.StampMode && !_space)
     {
       _draw.DropStamp(_mouse.Current, new Vector2(_screenshot.Width, _screenshot.Height),
                       _screenshot, _camera, Mirror);
+      _ripple.Pop(_mouse.Current);
       return;
     }
 
@@ -308,7 +420,8 @@ public sealed class InputHandler
     if (button == MouseButton.Left)
     {
       if (_exporter.Dragging) _exporter.Finish();
-      if (_draw.IsEnabled && !_draw.StampMode && !_spacePan) _draw.End();
+      if (_draw.DraggingSticker) _draw.EndStickerDrag();
+      if (_draw.IsEnabled && !_draw.StampMode && !_draw.StickerMode && !_spacePan) _draw.End();
       _spacePan = false;
       _mouse.Drag = false;
     }
@@ -322,7 +435,9 @@ public sealed class InputHandler
 
   private void ScrollUp()
   {
+    if (_draw.IsEnabled && _draw.StickerMode && _draw.SelectedStickerIndex >= 0) { _draw.ResizeSelected(+16f); return; }
     if (_ctrl && _flashlight.IsEnabled) { _flashlight.DeltaRadius += Flashlight.InitialDeltaRadius; }
+    else if (_ctrl && _draw.IsEnabled && _draw.StickerMode) { _draw.StickerSizeDelta(+16f); }
     else if (_ctrl && _draw.IsEnabled) { _draw.ThicknessDelta(+1f); }
     else
     {
@@ -333,13 +448,30 @@ public sealed class InputHandler
 
   private void ScrollDown()
   {
+    if (_draw.IsEnabled && _draw.StickerMode && _draw.SelectedStickerIndex >= 0) { _draw.ResizeSelected(-16f); return; }
     if (_ctrl && _flashlight.IsEnabled) { _flashlight.DeltaRadius -= Flashlight.InitialDeltaRadius; }
+    else if (_ctrl && _draw.IsEnabled && _draw.StickerMode) { _draw.StickerSizeDelta(-16f); }
     else if (_ctrl && _draw.IsEnabled) { _draw.ThicknessDelta(-1f); }
     else
     {
       _camera.DeltaScale -= _config.ScrollSpeed;
       _camera.ScalePivot = _mouse.Current;
     }
+  }
+
+  private void OnKeyChar(IKeyboard keyboard, char c)
+  {
+    if (_draw.TextMode && _draw.ActiveText != null) _draw.TypeChar(c);
+  }
+
+  private Vector2 ScreenToImage(Vector2 cursor)
+  {
+    var windowSize = new Vector2(_screenshot.Width, _screenshot.Height);
+    var centered = cursor - windowSize * 0.5f;
+    var world = centered / _camera.Scale;
+    var p = world + _camera.Position + new Vector2(_screenshot.Width, _screenshot.Height) * 0.5f;
+    if (Mirror) p.X = _screenshot.Width - p.X;
+    return p;
   }
 
   private static void TryCopyToClipboard(string text)

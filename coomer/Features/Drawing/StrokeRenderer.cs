@@ -59,7 +59,7 @@ public sealed unsafe class StrokeRenderer : IDisposable
                    Screenshot shot, Vector2 cursorScreen, ColorHistory? history,
                    RegionExporter? exporter)
   {
-    bool wantsBrushRing = tool.IsEnabled && !tool.StampMode;
+    bool wantsBrushRing = tool.IsEnabled && !tool.StampMode && !tool.StickerMode;
     bool wantsStamps = !tool.Hide && tool.Stamps.Count > 0;
     bool wantsStrokes = !tool.Hide && tool.Strokes.Count > 0;
     bool wantsHistory = history != null && history.Entries.Count > 0;
@@ -98,7 +98,10 @@ public sealed unsafe class StrokeRenderer : IDisposable
       {
         _verts.Clear();
         BuildStroke(s, _verts);
-        if (_verts.Count > 0) UploadAndDraw(_verts, s.Color);
+        if (_verts.Count == 0) continue;
+        var col = s.Color;
+        if (s.Shape == DrawShape.Highlighter) col.W *= 0.4f;
+        UploadAndDraw(_verts, col);
       }
     }
     if (wantsStamps)
@@ -190,6 +193,7 @@ public sealed unsafe class StrokeRenderer : IDisposable
     switch (s.Shape)
     {
       case DrawShape.Free:
+      case DrawShape.Highlighter:
         if (s.Points.Count == 1) { EmitSeg(s.Points[0], s.Points[0], h, verts); break; }
         if (s.Points.Count == 2) { EmitSeg(s.Points[0], s.Points[1], h, verts); break; }
         EmitSmoothFree(s.Points, h, verts);
