@@ -1,0 +1,32 @@
+using System.Numerics;
+
+namespace Coomer.Features.Effects;
+
+public sealed class RippleEffect
+{
+  public Vector2 Center;
+  public float Ttl;
+  public float Duration = 0.45f;
+  public Vector4 Color = new(0.4f, 0.8f, 1f, 1f);
+  public float StartRadius = 6f;
+  public float EndRadius = 48f;
+
+  public bool Active => Ttl > 0f;
+  public float Progress => Duration <= 0f ? 1f : 1f - (Ttl / Duration);
+
+  public void Pop(Vector2 cursorScreen, Vector4? color = null)
+  {
+    Center = cursorScreen;
+    Ttl = Duration;
+    if (color.HasValue) Color = color.Value;
+  }
+
+  public void Tick(float dt)
+  {
+    if (Ttl <= 0f) return;
+    Ttl = MathF.Max(0f, Ttl - dt);
+  }
+
+  public float CurrentRadius => StartRadius + (EndRadius - StartRadius) * Progress;
+  public float CurrentAlpha => Color.W * (1f - Progress);
+}

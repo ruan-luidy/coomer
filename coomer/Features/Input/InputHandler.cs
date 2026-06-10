@@ -6,6 +6,7 @@ using Coomer.Features.Configuration;
 using Coomer.Features.Lighting;
 using Coomer.Features.Drawing;
 using Coomer.Features.Stickers;
+using Coomer.Features.Effects;
 using Coomer.App;
 
 namespace Coomer.Features.Input;
@@ -23,6 +24,7 @@ public sealed class InputHandler
   private readonly RegionExporter _exporter;
   private readonly StickerCache _stickers;
   private readonly StickerState _stickerState;
+  private readonly RippleEffect _ripple;
 
   private Mouse _mouse;
   private bool _ctrl;
@@ -39,11 +41,13 @@ public sealed class InputHandler
   public DrawTool Draw => _draw;
   public RegionExporter Exporter => _exporter;
   public StickerState StickerState => _stickerState;
+  public RippleEffect Ripple => _ripple;
 
   public InputHandler(IInputContext input, Camera camera, Flashlight flashlight,
                       Config config, Screenshot screenshot, string configPath,
                       float frameRate, ColorPicker picker, DrawTool draw,
-                      RegionExporter exporter, StickerCache stickers, StickerState stickerState)
+                      RegionExporter exporter, StickerCache stickers, StickerState stickerState,
+                      RippleEffect ripple)
   {
     _camera = camera;
     _flashlight = flashlight;
@@ -56,6 +60,7 @@ public sealed class InputHandler
     _exporter = exporter;
     _stickers = stickers;
     _stickerState = stickerState;
+    _ripple = ripple;
 
     foreach (var keyboard in input.Keyboards)
     {
@@ -206,6 +211,9 @@ public sealed class InputHandler
         break;
 
       case Key.H:
+        if (_draw.IsEnabled && _draw.StickerMode) { _draw.StickerMirror = !_draw.StickerMirror; break; }
+        _camera.Pan(new Vector2(-_config.CameraPanAmount, 0));
+        break;
       case Key.Left:
         _camera.Pan(new Vector2(-_config.CameraPanAmount, 0));
         break;
@@ -296,6 +304,7 @@ public sealed class InputHandler
     {
       _draw.DropSticker(_mouse.Current, new Vector2(_screenshot.Width, _screenshot.Height),
                         _screenshot, _camera, Mirror, _stickerState.Current.Path);
+      _ripple.Pop(_mouse.Current);
       return;
     }
 
@@ -303,6 +312,7 @@ public sealed class InputHandler
     {
       _draw.DropStamp(_mouse.Current, new Vector2(_screenshot.Width, _screenshot.Height),
                       _screenshot, _camera, Mirror);
+      _ripple.Pop(_mouse.Current);
       return;
     }
 

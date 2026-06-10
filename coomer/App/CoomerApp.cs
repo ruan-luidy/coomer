@@ -11,6 +11,7 @@ using Coomer.Features.Input;
 using Coomer.Features.Rendering;
 using Coomer.Features.Drawing;
 using Coomer.Features.Stickers;
+using Coomer.Features.Effects;
 
 namespace Coomer.App;
 
@@ -32,6 +33,7 @@ public sealed class CoomerApp
   private RegionExporter _exporter = null!;
   private StickerCache _stickers = null!;
   private StickerState _stickerState = null!;
+  private RippleEffect _ripple = null!;
   private float _frameRate = 60f;
   private nint _hwnd;
   private int _frames;
@@ -92,11 +94,12 @@ public sealed class CoomerApp
     _stickers.Reload();
     _stickerState = new StickerState();
     _stickerState.RefreshFrom(_stickers);
+    _ripple = new RippleEffect();
 
     _renderer = new Renderer(_gl, _screenshot);
     _handler = new InputHandler(_input, _camera, _flashlight, _config, _screenshot,
                                 _configPath, _frameRate, _picker, _draw, _exporter,
-                                _stickers, _stickerState);
+                                _stickers, _stickerState, _ripple);
 
     if (_window.Native?.Win32 is { } win32)
       _hwnd = win32.Hwnd;
@@ -113,6 +116,7 @@ public sealed class CoomerApp
     _camera.Update(_config, dt, _handler.Dragging, windowSize);
     _flashlight.Update(_config, dt, _handler.CursorPosition);
     _exporter.TickStatus(dt);
+    _ripple.Tick(dt);
 
     if (_handler.Quitting)
       _window.Close();
@@ -130,7 +134,7 @@ public sealed class CoomerApp
     var windowSize = new Vector2(_screenshot.Width, _screenshot.Height);
     _renderer.Draw(_camera, _flashlight, _config, _handler.Mirror, windowSize,
                    _handler.CursorPosition, _draw, _picker.History, _exporter,
-                   _stickers, _stickerState);
+                   _stickers, _stickerState, _picker, _ripple);
 
     // Depois do Draw e antes do swap: framebuffer ja tem o composite final.
     int yOff = _window.FramebufferSize.Y - _screenshot.Height;

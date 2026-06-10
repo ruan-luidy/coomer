@@ -26,6 +26,7 @@ public sealed class DrawTool
   public bool Hide;
   public bool StampMode;
   public bool StickerMode;
+  public bool StickerMirror;
   public bool ShiftHeld;
   public int NextStampNumber = 1;
   public float StickerSize = 128f; // diametro em pixel de imagem
@@ -159,7 +160,7 @@ public sealed class DrawTool
                           Camera camera, bool mirror, string stickerPath)
   {
     var p = ScreenToImage(cursorScreen, windowSize, shot, camera, mirror);
-    StickerStamps.Add(new StickerStamp { Center = p, Path = stickerPath, HalfSize = StickerSize * 0.5f });
+    StickerStamps.Add(new StickerStamp { Center = p, Path = stickerPath, HalfSize = StickerSize * 0.5f, MirrorH = StickerMirror });
   }
 
   public void StickerSizeDelta(float d)

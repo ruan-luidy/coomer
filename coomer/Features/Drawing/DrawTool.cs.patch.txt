@@ -1,0 +1,11 @@
+// Patch em DrawTool.cs — 2 edits pontuais
+
+// 1) Adicionar campo apos `public bool StickerMode;`
+// LINHA 28 (depois de "public bool StickerMode;"), adicionar:
+  public bool StickerMirror;
+
+
+// 2) Modificar DropSticker pra incluir MirrorH. Localizar:
+//     StickerStamps.Add(new StickerStamp { Center = p, Path = stickerPath, HalfSize = StickerSize * 0.5f });
+// Trocar por:
+    StickerStamps.Add(new StickerStamp { Center = p, Path = stickerPath, HalfSize = StickerSize * 0.5f, MirrorH = StickerMirror });
