@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Numerics;
 using Coomer.Features.Capture;
 using Coomer.Features.Navigation;
+using Coomer.Features.Stickers;
 
 namespace Coomer.Features.Drawing;
 
@@ -30,6 +31,9 @@ public sealed class DrawTool
   public bool ShiftHeld;
   public int NextStampNumber = 1;
   public float StickerSize = 128f; // diametro em pixel de imagem
+  public int SelectedStickerIndex = -1;
+  public Vector2 DragOffset;
+  public bool DraggingSticker;
 
   public readonly List<Stroke> Strokes = new();
   public readonly List<Stamp> Stamps = new();
@@ -154,6 +158,75 @@ public sealed class DrawTool
     StickerStamps.Clear();
     NextStampNumber = 1;
     _active = null;
+    SelectedStickerIndex = -1;
+    DraggingSticker = false;
+  }
+
+  public int HitTestSticker(Vector2 cursorImg, StickerCache cache)
+  {
+    for (int i = StickerStamps.Count - 1; i >= 0; i--)
+    {
+      var s = StickerStamps[i];
+      var entry = cache.All.FirstOrDefault(e => e.Path == s.Path);
+      if (entry == null) continue;
+      float aspect = entry.Height == 0 ? 1f : (float)entry.Height / entry.Width;
+      float halfW = s.HalfSize;
+      float halfH = s.HalfSize * aspect;
+      var local = cursorImg - s.Center;
+      float cos = MathF.Cos(-s.Rotation);
+      float sin = MathF.Sin(-s.Rotation);
+      var rot = new Vector2(local.X * cos - local.Y * sin, local.X * sin + local.Y * cos);
+      if (MathF.Abs(rot.X) <= halfW && MathF.Abs(rot.Y) <= halfH) return i;
+    }
+    return -1;
+  }
+
+  public void SelectSticker(int idx)
+  {
+    SelectedStickerIndex = (idx >= 0 && idx < StickerStamps.Count) ? idx : -1;
+    DraggingSticker = false;
+  }
+
+  public void DeselectSticker()
+  {
+    SelectedStickerIndex = -1;
+    DraggingSticker = false;
+  }
+
+  public void BeginStickerDrag(Vector2 cursorImg)
+  {
+    if (SelectedStickerIndex < 0) return;
+    DragOffset = StickerStamps[SelectedStickerIndex].Center - cursorImg;
+    DraggingSticker = true;
+  }
+
+  public void DragSticker(Vector2 cursorImg)
+  {
+    if (!DraggingSticker || SelectedStickerIndex < 0) return;
+    StickerStamps[SelectedStickerIndex].Center = cursorImg + DragOffset;
+  }
+
+  public void EndStickerDrag() => DraggingSticker = false;
+
+  public void RotateSelected(float deltaRadians)
+  {
+    if (SelectedStickerIndex < 0) return;
+    StickerStamps[SelectedStickerIndex].Rotation += deltaRadians;
+  }
+
+  public void ResizeSelected(float delta)
+  {
+    if (SelectedStickerIndex < 0) return;
+    var s = StickerStamps[SelectedStickerIndex];
+    s.HalfSize = Math.Clamp(s.HalfSize + delta, 12f, 1024f);
+  }
+
+  public void DeleteSelected()
+  {
+    if (SelectedStickerIndex < 0 || SelectedStickerIndex >= StickerStamps.Count) return;
+    StickerStamps.RemoveAt(SelectedStickerIndex);
+    SelectedStickerIndex = -1;
+    DraggingSticker = false;
   }
 
   public void DropSticker(Vector2 cursorScreen, Vector2 windowSize, Screenshot shot,

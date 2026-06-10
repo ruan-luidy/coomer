@@ -4,6 +4,7 @@ out mediump vec4 color;
 
 uniform sampler2D tex;
 uniform float opacity;
+uniform vec4 tint;
 
 uniform bool invertRect;
 uniform vec2 invertMin;
@@ -35,7 +36,8 @@ float sdfBubble(vec2 p, vec2 center, float radius, vec2 stretch, float squeeze)
 void main()
 {
     vec4 c = texture(tex, vUv);
-    c.a *= opacity;
+    c.rgb *= tint.rgb;
+    c.a *= opacity * tint.a;
     if (c.a < 0.01) discard;
 
     if (flShadow > 0.001)

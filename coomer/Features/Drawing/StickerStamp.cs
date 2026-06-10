@@ -8,4 +8,5 @@ public sealed class StickerStamp
   public string Path = "";
   public float HalfSize;
   public bool MirrorH;
+  public float Rotation;
 }

@@ -201,6 +201,19 @@ public sealed class InputHandler
           _stickerState.CycleCategory(_stickers, _shift ? -1 : +1);
         break;
 
+      case Key.Q:
+        if (_draw.IsEnabled && _draw.StickerMode && _draw.SelectedStickerIndex >= 0)
+          _draw.RotateSelected(-MathF.PI / 18f * (_shift ? 3f : 1f));
+        break;
+      case Key.E:
+        if (_draw.IsEnabled && _draw.StickerMode && _draw.SelectedStickerIndex >= 0)
+          _draw.RotateSelected(MathF.PI / 18f * (_shift ? 3f : 1f));
+        break;
+      case Key.Delete:
+        if (_draw.IsEnabled && _draw.StickerMode && _draw.SelectedStickerIndex >= 0)
+          _draw.DeleteSelected();
+        break;
+
       case Key.B:
         _exporter.ToggleCopy();
         if (_exporter.Active)
@@ -245,9 +258,10 @@ public sealed class InputHandler
     if (key is Key.ControlLeft or Key.ControlRight) _ctrl = false;
     else if (key is Key.ShiftLeft or Key.ShiftRight) _shift = false;
     else if (key is Key.Space) _space = false;
-    else if (key is Key.Q or Key.Escape)
+    else if (key is Key.Escape)
     {
       if (_exporter.Active) { _exporter.Cancel(); return; }
+      if (_draw.IsEnabled && _draw.SelectedStickerIndex >= 0) { _draw.DeselectSticker(); return; }
       Quitting = true;
     }
   }
@@ -259,6 +273,13 @@ public sealed class InputHandler
     if (_exporter.Dragging)
     {
       _exporter.Move(_mouse.Current);
+      _mouse.Previous = _mouse.Current;
+      return;
+    }
+
+    if (_draw.DraggingSticker && _mouse.Drag)
+    {
+      _draw.DragSticker(ScreenToImage(_mouse.Current));
       _mouse.Previous = _mouse.Current;
       return;
     }
@@ -300,11 +321,25 @@ public sealed class InputHandler
       return;
     }
 
-    if (button == MouseButton.Left && _draw.IsEnabled && _draw.StickerMode && _stickerState.Current != null && !_space)
+    if (button == MouseButton.Left && _draw.IsEnabled && _draw.StickerMode && !_space)
     {
-      _draw.DropSticker(_mouse.Current, new Vector2(_screenshot.Width, _screenshot.Height),
-                        _screenshot, _camera, Mirror, _stickerState.Current.Path);
-      _ripple.Pop(_mouse.Current);
+      var cursorImg = ScreenToImage(_mouse.Current);
+      int hit = _draw.HitTestSticker(cursorImg, _stickers);
+      if (hit >= 0)
+      {
+        _draw.SelectSticker(hit);
+        _draw.BeginStickerDrag(cursorImg);
+        _mouse.Previous = _mouse.Current;
+        _mouse.Drag = true;
+        return;
+      }
+      _draw.DeselectSticker();
+      if (_stickerState.Current != null)
+      {
+        _draw.DropSticker(_mouse.Current, new Vector2(_screenshot.Width, _screenshot.Height),
+                          _screenshot, _camera, Mirror, _stickerState.Current.Path);
+        _ripple.Pop(_mouse.Current);
+      }
       return;
     }
 
@@ -356,6 +391,7 @@ public sealed class InputHandler
     if (button == MouseButton.Left)
     {
       if (_exporter.Dragging) _exporter.Finish();
+      if (_draw.DraggingSticker) _draw.EndStickerDrag();
       if (_draw.IsEnabled && !_draw.StampMode && !_draw.StickerMode && !_spacePan) _draw.End();
       _spacePan = false;
       _mouse.Drag = false;
@@ -370,6 +406,7 @@ public sealed class InputHandler
 
   private void ScrollUp()
   {
+    if (_draw.IsEnabled && _draw.StickerMode && _draw.SelectedStickerIndex >= 0) { _draw.ResizeSelected(+16f); return; }
     if (_ctrl && _flashlight.IsEnabled) { _flashlight.DeltaRadius += Flashlight.InitialDeltaRadius; }
     else if (_ctrl && _draw.IsEnabled && _draw.StickerMode) { _draw.StickerSizeDelta(+16f); }
     else if (_ctrl && _draw.IsEnabled) { _draw.ThicknessDelta(+1f); }
@@ -382,6 +419,7 @@ public sealed class InputHandler
 
   private void ScrollDown()
   {
+    if (_draw.IsEnabled && _draw.StickerMode && _draw.SelectedStickerIndex >= 0) { _draw.ResizeSelected(-16f); return; }
     if (_ctrl && _flashlight.IsEnabled) { _flashlight.DeltaRadius -= Flashlight.InitialDeltaRadius; }
     else if (_ctrl && _draw.IsEnabled && _draw.StickerMode) { _draw.StickerSizeDelta(-16f); }
     else if (_ctrl && _draw.IsEnabled) { _draw.ThicknessDelta(-1f); }
@@ -390,6 +428,16 @@ public sealed class InputHandler
       _camera.DeltaScale -= _config.ScrollSpeed;
       _camera.ScalePivot = _mouse.Current;
     }
+  }
+
+  private Vector2 ScreenToImage(Vector2 cursor)
+  {
+    var windowSize = new Vector2(_screenshot.Width, _screenshot.Height);
+    var centered = cursor - windowSize * 0.5f;
+    var world = centered / _camera.Scale;
+    var p = world + _camera.Position + new Vector2(_screenshot.Width, _screenshot.Height) * 0.5f;
+    if (Mirror) p.X = _screenshot.Width - p.X;
+    return p;
   }
 
   private static void TryCopyToClipboard(string text)

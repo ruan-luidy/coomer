@@ -50,6 +50,13 @@ public sealed class HudRenderer
 
     if (draw.StickerMode)
     {
+      if (draw.SelectedStickerIndex >= 0 && draw.SelectedStickerIndex < draw.StickerStamps.Count)
+      {
+        var sel = draw.StickerStamps[draw.SelectedStickerIndex];
+        var n = System.IO.Path.GetFileName(sel.Path);
+        float deg = sel.Rotation * 180f / MathF.PI;
+        return $"STICKER SEL · {n} · {(int)(sel.HalfSize * 2)}px · {(int)deg}°";
+      }
       var cur = stickerState.Current;
       var name = cur != null ? System.IO.Path.GetFileName(cur.Path) : "(vazio)";
       var flag = draw.StickerMirror ? " <-> " : " ";

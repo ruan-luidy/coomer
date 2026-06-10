@@ -10,10 +10,14 @@ namespace Coomer.Features.Stickers;
 
 public sealed unsafe class StickerRenderer : IDisposable
 {
+  private static readonly Vector4 OutlineCyan = new(0.30f, 0.85f, 1.00f, 1.00f);
+  private static readonly Vector4 NoTint = new(1f, 1f, 1f, 1f);
+
   private readonly GL _gl;
   private readonly Shader _shader;
   private readonly uint _vao;
   private readonly uint _vbo;
+  private readonly uint _whiteTex;
 
   public StickerRenderer(GL gl)
   {
@@ -33,6 +37,15 @@ public sealed unsafe class StickerRenderer : IDisposable
     gl.VertexAttribPointer(1, 2, VertexAttribPointerType.Float, false, 4 * sizeof(float), (void*)(2 * sizeof(float)));
     gl.EnableVertexAttribArray(1);
 
+    _whiteTex = gl.GenTexture();
+    gl.BindTexture(TextureTarget.Texture2D, _whiteTex);
+    Span<byte> white = stackalloc byte[] { 255, 255, 255, 255 };
+    fixed (byte* p = white)
+      gl.TexImage2D(TextureTarget.Texture2D, 0, (int)InternalFormat.Rgba8, 1u, 1u, 0,
+          Silk.NET.OpenGL.PixelFormat.Rgba, PixelType.UnsignedByte, p);
+    gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)GLEnum.Nearest);
+    gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)GLEnum.Nearest);
+
     _shader.Use();
     _shader.SetInt("tex", 0);
   }
@@ -43,8 +56,9 @@ public sealed unsafe class StickerRenderer : IDisposable
                          Coomer.Features.Lighting.Flashlight flashlight)
   {
     bool hasSticker = !tool.Hide && tool.StickerStamps.Count > 0;
-    bool wantsGhost = tool.IsEnabled && tool.StickerMode && state.Current != null;
-    if (!hasSticker && !wantsGhost) return;
+    bool wantsGhost = tool.IsEnabled && tool.StickerMode && state.Current != null && tool.SelectedStickerIndex < 0;
+    bool wantsOutline = !tool.Hide && tool.SelectedStickerIndex >= 0 && tool.SelectedStickerIndex < tool.StickerStamps.Count;
+    if (!hasSticker && !wantsGhost && !wantsOutline) return;
 
     var screenshotSize = new Vector2(shot.Width, shot.Height);
 
@@ -78,12 +92,13 @@ public sealed unsafe class StickerRenderer : IDisposable
     _gl.Enable(EnableCap.Blend);
     _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
     _gl.ActiveTexture(TextureUnit.Texture0);
+    _shader.SetVec4("tint", NoTint);
 
     foreach (var s in tool.StickerStamps)
     {
       var entry = cache.All.FirstOrDefault(e => e.Path == s.Path);
       if (entry == null) continue;
-      DrawOne(entry, s.Center, s.HalfSize, 1.0f, s.MirrorH);
+      DrawOne(entry.Texture, s.Center, s.HalfSize, s.HalfSize * Aspect(entry), 1.0f, s.MirrorH, s.Rotation);
     }
 
     if (wantsGhost)
@@ -91,33 +106,98 @@ public sealed unsafe class StickerRenderer : IDisposable
       var entry = state.Current!;
       var cursorImg = ScreenToImage(cursorScreen, windowSize, shot, camera, mirror);
       float halfSize = tool.StickerSize * 0.5f;
-      DrawOne(entry, cursorImg, halfSize, 0.5f, tool.StickerMirror);
+      DrawOne(entry.Texture, cursorImg, halfSize, halfSize * Aspect(entry), 0.5f, tool.StickerMirror, 0f);
     }
 
+    if (wantsOutline)
+    {
+      var sel = tool.StickerStamps[tool.SelectedStickerIndex];
+      var entry = cache.All.FirstOrDefault(e => e.Path == sel.Path);
+      if (entry != null)
+        DrawOutline(sel.Center, sel.HalfSize, sel.HalfSize * Aspect(entry), sel.Rotation, camera.Scale);
+    }
+
+    _shader.SetVec4("tint", NoTint);
     _gl.Disable(EnableCap.Blend);
   }
 
-  private unsafe void DrawOne(StickerEntry entry, Vector2 centerImg, float halfSize, float opacity, bool mirrorH)
-  {
-    float aspect = entry.Height == 0 ? 1f : (float)entry.Height / entry.Width;
-    float halfW = halfSize;
-    float halfH = halfSize * aspect;
+  private static float Aspect(StickerEntry e) => e.Height == 0 ? 1f : (float)e.Height / e.Width;
 
+  private unsafe void DrawOne(uint texture, Vector2 centerImg, float halfW, float halfH,
+                              float opacity, bool mirrorH, float rotation)
+  {
     float u0 = mirrorH ? 1f : 0f;
     float u1 = mirrorH ? 0f : 1f;
+    float cos = MathF.Cos(rotation);
+    float sin = MathF.Sin(rotation);
+    Vector2 Rot(float lx, float ly) => new(centerImg.X + lx * cos - ly * sin, centerImg.Y + lx * sin + ly * cos);
+
+    var tl = Rot(-halfW, -halfH);
+    var tr = Rot( halfW, -halfH);
+    var br = Rot( halfW,  halfH);
+    var bl = Rot(-halfW,  halfH);
 
     Span<float> v = stackalloc float[24]
     {
-      centerImg.X - halfW, centerImg.Y - halfH, u0, 0f,
-      centerImg.X + halfW, centerImg.Y - halfH, u1, 0f,
-      centerImg.X + halfW, centerImg.Y + halfH, u1, 1f,
-      centerImg.X - halfW, centerImg.Y - halfH, u0, 0f,
-      centerImg.X + halfW, centerImg.Y + halfH, u1, 1f,
-      centerImg.X - halfW, centerImg.Y + halfH, u0, 1f,
+      tl.X, tl.Y, u0, 0f,
+      tr.X, tr.Y, u1, 0f,
+      br.X, br.Y, u1, 1f,
+      tl.X, tl.Y, u0, 0f,
+      br.X, br.Y, u1, 1f,
+      bl.X, bl.Y, u0, 1f,
     };
     _gl.BufferSubData<float>(BufferTargetARB.ArrayBuffer, 0, v);
-    _gl.BindTexture(TextureTarget.Texture2D, entry.Texture);
+    _gl.BindTexture(TextureTarget.Texture2D, texture);
     _shader.SetFloat("opacity", opacity);
+    _gl.DrawArrays(PrimitiveType.Triangles, 0, 6);
+  }
+
+  // Outline: 4 quads finos cyan, extrudidos pra fora, seguindo a rotacao do sticker.
+  private unsafe void DrawOutline(Vector2 centerImg, float halfW, float halfH, float rotation, float cameraScale)
+  {
+    float thicknessImg = MathF.Max(1.5f / cameraScale, 0.5f);
+    float cos = MathF.Cos(rotation);
+    float sin = MathF.Sin(rotation);
+    Vector2 Rot(float lx, float ly) => new(centerImg.X + lx * cos - ly * sin, centerImg.Y + lx * sin + ly * cos);
+
+    _gl.BindTexture(TextureTarget.Texture2D, _whiteTex);
+    _shader.SetFloat("opacity", 1.0f);
+    _shader.SetVec4("tint", OutlineCyan);
+
+    // top
+    EmitEdgeQuad(Rot(-halfW - thicknessImg, -halfH - thicknessImg),
+                 Rot( halfW + thicknessImg, -halfH - thicknessImg),
+                 Rot( halfW + thicknessImg, -halfH + thicknessImg),
+                 Rot(-halfW - thicknessImg, -halfH + thicknessImg));
+    // bottom
+    EmitEdgeQuad(Rot(-halfW - thicknessImg,  halfH - thicknessImg),
+                 Rot( halfW + thicknessImg,  halfH - thicknessImg),
+                 Rot( halfW + thicknessImg,  halfH + thicknessImg),
+                 Rot(-halfW - thicknessImg,  halfH + thicknessImg));
+    // left
+    EmitEdgeQuad(Rot(-halfW - thicknessImg, -halfH + thicknessImg),
+                 Rot(-halfW + thicknessImg, -halfH + thicknessImg),
+                 Rot(-halfW + thicknessImg,  halfH - thicknessImg),
+                 Rot(-halfW - thicknessImg,  halfH - thicknessImg));
+    // right
+    EmitEdgeQuad(Rot( halfW - thicknessImg, -halfH + thicknessImg),
+                 Rot( halfW + thicknessImg, -halfH + thicknessImg),
+                 Rot( halfW + thicknessImg,  halfH - thicknessImg),
+                 Rot( halfW - thicknessImg,  halfH - thicknessImg));
+  }
+
+  private unsafe void EmitEdgeQuad(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3)
+  {
+    Span<float> v = stackalloc float[24]
+    {
+      p0.X, p0.Y, 0f, 0f,
+      p1.X, p1.Y, 1f, 0f,
+      p2.X, p2.Y, 1f, 1f,
+      p0.X, p0.Y, 0f, 0f,
+      p2.X, p2.Y, 1f, 1f,
+      p3.X, p3.Y, 0f, 1f,
+    };
+    _gl.BufferSubData<float>(BufferTargetARB.ArrayBuffer, 0, v);
     _gl.DrawArrays(PrimitiveType.Triangles, 0, 6);
   }
 
@@ -135,6 +215,7 @@ public sealed unsafe class StickerRenderer : IDisposable
   {
     _gl.DeleteVertexArray(_vao);
     _gl.DeleteBuffer(_vbo);
+    _gl.DeleteTexture(_whiteTex);
     _shader.Dispose();
   }
 }
