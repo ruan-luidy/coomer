@@ -199,8 +199,13 @@ public sealed unsafe class StrokeRenderer : IDisposable
     var dir = d / len;
     EmitSeg(a, b, h, v); // shaft
 
-    // Cabeca: 30% do shaft, no minimo 6*thickness, no maximo 50% do shaft.
-    float headLen = Math.Clamp(len * 0.30f, thickness * 6f, len * 0.50f);
+    // Cabeca: 30% do shaft, com piso 6*thickness (pra seta curta ainda mostrar
+    // ponta) e teto 50% do shaft. Em seta curtinha + brush gigante o piso pode
+    // ultrapassar o teto — clampa o piso ao teto antes, senao Math.Clamp
+    // estoura com ArgumentException no left-drag e a app trava.
+    float maxHead = len * 0.50f;
+    float floor = MathF.Min(thickness * 6f, maxHead);
+    float headLen = Math.Clamp(len * 0.30f, floor, maxHead);
     const float theta = 0.5f; // ~28.6 graus de abertura
     float cs = MathF.Cos(theta), sn = MathF.Sin(theta);
 
