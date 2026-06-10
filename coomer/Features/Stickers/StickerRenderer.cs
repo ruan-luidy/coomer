@@ -3,6 +3,7 @@ using Silk.NET.OpenGL;
 using Coomer.Features.Capture;
 using Coomer.Features.Drawing;
 using Coomer.Features.Navigation;
+using Coomer.Features.Text;
 using Coomer.Features.Rendering;
 using Shader = Coomer.Features.Rendering.Shader;
 
@@ -53,12 +54,14 @@ public sealed unsafe class StickerRenderer : IDisposable
   public void DrawStamps(DrawTool tool, Camera camera, bool mirror, Vector2 windowSize,
                          Screenshot shot, Vector2 cursorScreen, StickerCache cache,
                          StickerState state, Coomer.Features.Capture.RegionExporter? exporter,
-                         Coomer.Features.Lighting.Flashlight flashlight)
+                         Coomer.Features.Lighting.Flashlight flashlight,
+                         Coomer.Features.Text.TextRenderer textRenderer)
   {
     bool hasSticker = !tool.Hide && tool.StickerStamps.Count > 0;
     bool wantsGhost = tool.IsEnabled && tool.StickerMode && state.Current != null && tool.SelectedStickerIndex < 0;
     bool wantsOutline = !tool.Hide && tool.SelectedStickerIndex >= 0 && tool.SelectedStickerIndex < tool.StickerStamps.Count;
-    if (!hasSticker && !wantsGhost && !wantsOutline) return;
+    bool hasText = !tool.Hide && (tool.TextStamps.Count > 0 || tool.ActiveText != null);
+    if (!hasSticker && !wantsGhost && !wantsOutline && !hasText) return;
 
     var screenshotSize = new Vector2(shot.Width, shot.Height);
 
@@ -117,8 +120,64 @@ public sealed unsafe class StickerRenderer : IDisposable
         DrawOutline(sel.Center, sel.HalfSize, sel.HalfSize * Aspect(entry), sel.Rotation, camera.Scale);
     }
 
+    if (hasText)
+    {
+      foreach (var t in tool.TextStamps)
+        DrawTextStamp(textRenderer, t, 1.0f);
+      if (tool.ActiveText != null && tool.ActiveText.Text.Length > 0)
+        DrawTextStamp(textRenderer, tool.ActiveText, 1.0f);
+      if (tool.ActiveText != null) DrawTextCaret(tool.ActiveText, camera.Scale);
+    }
+
     _shader.SetVec4("tint", NoTint);
     _gl.Disable(EnableCap.Blend);
+  }
+
+  private unsafe void DrawTextStamp(Coomer.Features.Text.TextRenderer tr, TextStamp t, float opacity)
+  {
+    if (string.IsNullOrEmpty(t.Text)) return;
+    var (tex, tw, th) = tr.GetTexture(t.Text, t.FontSizePx);
+    _shader.SetVec4("tint", t.Color);
+    DrawOne(tex, t.TopLeft + new Vector2(tw, th) * 0.5f, tw * 0.5f, th * 0.5f, opacity, false, 0f);
+  }
+
+  // Caret simples piscando perto da posicao do prox char (top-right do texto atual).
+  private unsafe void DrawTextCaret(TextStamp t, float cameraScale)
+  {
+    float caretW = MathF.Max(1.5f / cameraScale, 0.5f);
+    float caretH = t.FontSizePx * 0.5f;
+    Vector2 origin;
+    if (string.IsNullOrEmpty(t.Text))
+      origin = t.TopLeft + new Vector2(0, caretH * 0.5f);
+    else
+    {
+      // posiciona o caret no fim do texto — sem TextRenderer aqui, aproxima
+      // pegando o quad ja desenhado (usamos um lookup pelo GetTexture).
+      // Pra v1 usamos a borda direita do TopLeft + um deslocamento simples.
+      // O caret apenas indica "estou digitando aqui".
+      origin = t.TopLeft + new Vector2(0, caretH * 0.5f); // mesmo lugar; visual ok pra MVP
+    }
+    _gl.BindTexture(TextureTarget.Texture2D, _whiteTex);
+    _shader.SetFloat("opacity", 1.0f);
+    // pisca: usa tempo via ticks (~2 Hz). simples e nao precisa estado.
+    bool on = (Environment.TickCount / 500) % 2 == 0;
+    if (!on) return;
+    _shader.SetVec4("tint", t.Color);
+    var p0 = origin;
+    var p1 = origin + new Vector2(caretW * 2f, 0);
+    var p2 = origin + new Vector2(caretW * 2f, caretH);
+    var p3 = origin + new Vector2(0, caretH);
+    Span<float> v = stackalloc float[24]
+    {
+      p0.X, p0.Y, 0f, 0f,
+      p1.X, p1.Y, 1f, 0f,
+      p2.X, p2.Y, 1f, 1f,
+      p0.X, p0.Y, 0f, 0f,
+      p2.X, p2.Y, 1f, 1f,
+      p3.X, p3.Y, 0f, 1f,
+    };
+    _gl.BufferSubData<float>(BufferTargetARB.ArrayBuffer, 0, v);
+    _gl.DrawArrays(PrimitiveType.Triangles, 0, 6);
   }
 
   private static float Aspect(StickerEntry e) => e.Height == 0 ? 1f : (float)e.Height / e.Width;

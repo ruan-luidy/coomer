@@ -28,6 +28,7 @@ public sealed class DrawTool
   public bool StampMode;
   public bool StickerMode;
   public bool StickerMirror;
+  public bool TextMode;
   public bool ShiftHeld;
   public int NextStampNumber = 1;
   public float StickerSize = 128f; // diametro em pixel de imagem
@@ -38,6 +39,9 @@ public sealed class DrawTool
   public readonly List<Stroke> Strokes = new();
   public readonly List<Stamp> Stamps = new();
   public readonly List<StickerStamp> StickerStamps = new();
+  public readonly List<TextStamp> TextStamps = new();
+  public int TextFontSize = 32;
+  public TextStamp? ActiveText;
 
   private Stroke? _active;
   private readonly OneEuroFilterV2 _filter = new();
@@ -74,10 +78,9 @@ public sealed class DrawTool
     var smoothed = _filter.Step(cursorScreen, dt);
     var p = ScreenToImage(smoothed, windowSize, shot, camera, mirror);
 
-    if (_active.Shape is DrawShape.Free or DrawShape.Arrow)
+    if (_active.Shape is DrawShape.Free or DrawShape.Arrow or DrawShape.Highlighter)
     {
-      // Arrow agora eh tambem freehand: sampling = Free. Curva suave + cabeca
-      // no fim apontando pra direcao do tangente final (calculado no render).
+      // Highlighter eh freehand grosso e translucido (alpha 0.4 no render).
       if (Vector2.DistanceSquared(_active.Points[^1], p) < 0.25f) return;
       _active.Points.Add(p);
     }
@@ -130,6 +133,7 @@ public sealed class DrawTool
     // traco, desfaz stamp; senao desfaz traco. Como nao temos timestamp,
     // priorizamos remover de quem foi adicionado por ultimo — heuristica:
     // se ha stamp e stampMode, desfaz stamp; senao traco. Pratico o bastante.
+    if (TextMode && TextStamps.Count > 0) { TextStamps.RemoveAt(TextStamps.Count - 1); return; }
     if (StickerMode && StickerStamps.Count > 0) { StickerStamps.RemoveAt(StickerStamps.Count - 1); return; }
     if (StampMode && Stamps.Count > 0)
     {
@@ -156,6 +160,8 @@ public sealed class DrawTool
     Strokes.Clear();
     Stamps.Clear();
     StickerStamps.Clear();
+    TextStamps.Clear();
+    ActiveText = null;
     NextStampNumber = 1;
     _active = null;
     SelectedStickerIndex = -1;
@@ -229,6 +235,36 @@ public sealed class DrawTool
     DraggingSticker = false;
   }
 
+  public void BeginText(Vector2 cursorScreen, Vector2 windowSize, Screenshot shot, Camera camera, bool mirror)
+  {
+    CommitActiveText();
+    var p = ScreenToImage(cursorScreen, windowSize, shot, camera, mirror);
+    ActiveText = new TextStamp { TopLeft = p, Color = CurrentColor, FontSizePx = TextFontSize };
+  }
+
+  public void TypeChar(char c)
+  {
+    if (ActiveText == null) return;
+    if (c == '\b')
+    {
+      if (ActiveText.Text.Length > 0) ActiveText.Text = ActiveText.Text[..^1];
+      return;
+    }
+    if (c < ' ') return;
+    ActiveText.Text += c;
+  }
+
+  public void CommitActiveText()
+  {
+    if (ActiveText == null) return;
+    if (!string.IsNullOrEmpty(ActiveText.Text)) TextStamps.Add(ActiveText);
+    ActiveText = null;
+  }
+
+  public void CancelActiveText() => ActiveText = null;
+
+  public void TextFontSizeDelta(int d) => TextFontSize = Math.Clamp(TextFontSize + d, 10, 256);
+
   public void DropSticker(Vector2 cursorScreen, Vector2 windowSize, Screenshot shot,
                           Camera camera, bool mirror, string stickerPath)
   {
@@ -247,6 +283,7 @@ public sealed class DrawTool
       DrawShape.Line => DrawShape.Arrow,
       DrawShape.Arrow => DrawShape.Rect,
       DrawShape.Rect => DrawShape.Circle,
+      DrawShape.Circle => DrawShape.Highlighter,
       _ => DrawShape.Free,
     };
   }

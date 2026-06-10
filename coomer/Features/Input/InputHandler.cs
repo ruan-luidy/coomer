@@ -66,6 +66,7 @@ public sealed class InputHandler
     {
       keyboard.KeyDown += OnKeyDown;
       keyboard.KeyUp += OnKeyUp;
+      keyboard.KeyChar += OnKeyChar;
     }
     foreach (var mouse in input.Mice)
     {
@@ -163,11 +164,13 @@ public sealed class InputHandler
         if (_draw.IsEnabled) _draw.Clear();
         break;
       case Key.LeftBracket:
-        if (_draw.IsEnabled && _draw.StickerMode) _draw.StickerSizeDelta(-8f);
+        if (_draw.IsEnabled && _draw.TextMode) _draw.TextFontSizeDelta(-2);
+        else if (_draw.IsEnabled && _draw.StickerMode) _draw.StickerSizeDelta(-8f);
         else if (_draw.IsEnabled) _draw.ThicknessDelta(-1f);
         break;
       case Key.RightBracket:
-        if (_draw.IsEnabled && _draw.StickerMode) _draw.StickerSizeDelta(+8f);
+        if (_draw.IsEnabled && _draw.TextMode) _draw.TextFontSizeDelta(+2);
+        else if (_draw.IsEnabled && _draw.StickerMode) _draw.StickerSizeDelta(+8f);
         else if (_draw.IsEnabled) _draw.ThicknessDelta(+1f);
         break;
       case Key.Comma:
@@ -201,6 +204,24 @@ public sealed class InputHandler
           _stickerState.CycleCategory(_stickers, _shift ? -1 : +1);
         break;
 
+      case Key.W:
+        _draw.TextMode = !_draw.TextMode;
+        if (_draw.TextMode)
+        {
+          _draw.IsEnabled = true;
+          _draw.StampMode = false;
+          _draw.StickerMode = false;
+          _flashlight.IsEnabled = false;
+          _picker.IsEnabled = false;
+        }
+        else _draw.CancelActiveText();
+        break;
+      case Key.Enter:
+        if (_draw.TextMode) _draw.CommitActiveText();
+        break;
+      case Key.Backspace:
+        if (_draw.TextMode) _draw.TypeChar('\b');
+        break;
       case Key.Q:
         if (_draw.IsEnabled && _draw.StickerMode && _draw.SelectedStickerIndex >= 0)
           _draw.RotateSelected(-MathF.PI / 18f * (_shift ? 3f : 1f));
@@ -261,6 +282,7 @@ public sealed class InputHandler
     else if (key is Key.Escape)
     {
       if (_exporter.Active) { _exporter.Cancel(); return; }
+      if (_draw.TextMode && _draw.ActiveText != null) { _draw.CancelActiveText(); return; }
       if (_draw.IsEnabled && _draw.SelectedStickerIndex >= 0) { _draw.DeselectSticker(); return; }
       Quitting = true;
     }
@@ -318,6 +340,13 @@ public sealed class InputHandler
     if (button == MouseButton.Left && _exporter.Active)
     {
       _exporter.BeginDrag(_mouse.Current);
+      return;
+    }
+
+    if (button == MouseButton.Left && _draw.IsEnabled && _draw.TextMode && !_space)
+    {
+      _draw.BeginText(_mouse.Current, new Vector2(_screenshot.Width, _screenshot.Height),
+                      _screenshot, _camera, Mirror);
       return;
     }
 
@@ -428,6 +457,11 @@ public sealed class InputHandler
       _camera.DeltaScale -= _config.ScrollSpeed;
       _camera.ScalePivot = _mouse.Current;
     }
+  }
+
+  private void OnKeyChar(IKeyboard keyboard, char c)
+  {
+    if (_draw.TextMode && _draw.ActiveText != null) _draw.TypeChar(c);
   }
 
   private Vector2 ScreenToImage(Vector2 cursor)

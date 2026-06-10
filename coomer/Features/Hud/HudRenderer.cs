@@ -63,6 +63,17 @@ public sealed class HudRenderer
       return $"STICKER ·{flag}{name} · {(int)draw.StickerSize}px";
     }
 
+    if (draw.TextMode)
+    {
+      if (draw.ActiveText != null)
+      {
+        var preview = draw.ActiveText.Text.Length == 0 ? "(digite)" : draw.ActiveText.Text;
+        if (preview.Length > 32) preview = preview[..32] + "...";
+        return $"TEXTO · {preview} · {draw.TextFontSize}px";
+      }
+      return $"TEXTO · click pra comecar · {draw.TextFontSize}px";
+    }
+
     if (draw.StampMode)
       return $"STAMP # · proximo: {draw.NextStampNumber} · raio: {(int)(MathF.Max(12f, draw.Thickness * 2.5f))}px";
 
@@ -73,6 +84,7 @@ public sealed class HudRenderer
       DrawShape.Arrow => "seta",
       DrawShape.Rect => "retangulo",
       DrawShape.Circle => "circulo",
+      DrawShape.Highlighter => "marca-texto",
       _ => "?",
     };
     string colorTag = ColorName(draw.ColorIndex);

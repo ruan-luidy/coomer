@@ -51,6 +51,12 @@ public sealed unsafe class TextRenderer : IDisposable
 
   public void NewFrame() => _frame++;
 
+  public (uint texture, int w, int h) GetTexture(string text, int sizePx)
+  {
+    var e = GetOrCreate(text, sizePx);
+    return (e.Texture, e.Width, e.Height);
+  }
+
   public (int w, int h) Measure(string text, int sizePx)
   {
     var entry = GetOrCreate(text, sizePx);

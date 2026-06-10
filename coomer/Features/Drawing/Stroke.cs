@@ -9,6 +9,7 @@ public enum DrawShape
   Arrow,
   Rect,
   Circle,
+  Highlighter,
 }
 
 // Pontos em coord de imagem (sem mirror). Thickness em pixel de imagem — escala com zoom.
