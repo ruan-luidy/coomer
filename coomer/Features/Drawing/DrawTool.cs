@@ -25,11 +25,14 @@ public sealed class DrawTool
   public bool AutoCircle = true;
   public bool Hide;
   public bool StampMode;
+  public bool StickerMode;
   public bool ShiftHeld;
   public int NextStampNumber = 1;
+  public float StickerSize = 128f; // diametro em pixel de imagem
 
   public readonly List<Stroke> Strokes = new();
   public readonly List<Stamp> Stamps = new();
+  public readonly List<StickerStamp> StickerStamps = new();
 
   private Stroke? _active;
   private readonly OneEuroFilterV2 _filter = new();
@@ -122,6 +125,7 @@ public sealed class DrawTool
     // traco, desfaz stamp; senao desfaz traco. Como nao temos timestamp,
     // priorizamos remover de quem foi adicionado por ultimo — heuristica:
     // se ha stamp e stampMode, desfaz stamp; senao traco. Pratico o bastante.
+    if (StickerMode && StickerStamps.Count > 0) { StickerStamps.RemoveAt(StickerStamps.Count - 1); return; }
     if (StampMode && Stamps.Count > 0)
     {
       Stamps.RemoveAt(Stamps.Count - 1);
@@ -134,6 +138,7 @@ public sealed class DrawTool
       _active = null;
       return;
     }
+    if (StickerStamps.Count > 0) { StickerStamps.RemoveAt(StickerStamps.Count - 1); return; }
     if (Stamps.Count > 0)
     {
       Stamps.RemoveAt(Stamps.Count - 1);
@@ -145,9 +150,20 @@ public sealed class DrawTool
   {
     Strokes.Clear();
     Stamps.Clear();
+    StickerStamps.Clear();
     NextStampNumber = 1;
     _active = null;
   }
+
+  public void DropSticker(Vector2 cursorScreen, Vector2 windowSize, Screenshot shot,
+                          Camera camera, bool mirror, string stickerPath)
+  {
+    var p = ScreenToImage(cursorScreen, windowSize, shot, camera, mirror);
+    StickerStamps.Add(new StickerStamp { Center = p, Path = stickerPath, HalfSize = StickerSize * 0.5f });
+  }
+
+  public void StickerSizeDelta(float d)
+    => StickerSize = Math.Clamp(StickerSize + d, 24f, 1024f);
 
   public void CycleShape()
   {

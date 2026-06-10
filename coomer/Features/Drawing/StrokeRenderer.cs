@@ -59,7 +59,7 @@ public sealed unsafe class StrokeRenderer : IDisposable
                    Screenshot shot, Vector2 cursorScreen, ColorHistory? history,
                    RegionExporter? exporter)
   {
-    bool wantsBrushRing = tool.IsEnabled && !tool.StampMode;
+    bool wantsBrushRing = tool.IsEnabled && !tool.StampMode && !tool.StickerMode;
     bool wantsStamps = !tool.Hide && tool.Stamps.Count > 0;
     bool wantsStrokes = !tool.Hide && tool.Strokes.Count > 0;
     bool wantsHistory = history != null && history.Entries.Count > 0;

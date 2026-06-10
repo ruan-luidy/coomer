@@ -5,6 +5,7 @@ using Coomer.Features.Capture;
 using Coomer.Features.Configuration;
 using Coomer.Features.Lighting;
 using Coomer.Features.Drawing;
+using Coomer.Features.Stickers;
 using Coomer.App;
 
 namespace Coomer.Features.Input;
@@ -20,6 +21,8 @@ public sealed class InputHandler
   private readonly ColorPicker _picker;
   private readonly DrawTool _draw;
   private readonly RegionExporter _exporter;
+  private readonly StickerCache _stickers;
+  private readonly StickerState _stickerState;
 
   private Mouse _mouse;
   private bool _ctrl;
@@ -35,11 +38,12 @@ public sealed class InputHandler
   public ColorPicker Picker => _picker;
   public DrawTool Draw => _draw;
   public RegionExporter Exporter => _exporter;
+  public StickerState StickerState => _stickerState;
 
   public InputHandler(IInputContext input, Camera camera, Flashlight flashlight,
                       Config config, Screenshot screenshot, string configPath,
                       float frameRate, ColorPicker picker, DrawTool draw,
-                      RegionExporter exporter)
+                      RegionExporter exporter, StickerCache stickers, StickerState stickerState)
   {
     _camera = camera;
     _flashlight = flashlight;
@@ -50,6 +54,8 @@ public sealed class InputHandler
     _picker = picker;
     _draw = draw;
     _exporter = exporter;
+    _stickers = stickers;
+    _stickerState = stickerState;
 
     foreach (var keyboard in input.Keyboards)
     {
@@ -111,6 +117,8 @@ public sealed class InputHandler
       case Key.R:
         if (File.Exists(_configPath))
           _config.Reload(_configPath);
+        _stickers.Reload();
+        _stickerState.RefreshFrom(_stickers);
         break;
 
       case Key.M:
@@ -150,10 +158,12 @@ public sealed class InputHandler
         if (_draw.IsEnabled) _draw.Clear();
         break;
       case Key.LeftBracket:
-        if (_draw.IsEnabled) _draw.ThicknessDelta(-1f);
+        if (_draw.IsEnabled && _draw.StickerMode) _draw.StickerSizeDelta(-8f);
+        else if (_draw.IsEnabled) _draw.ThicknessDelta(-1f);
         break;
       case Key.RightBracket:
-        if (_draw.IsEnabled) _draw.ThicknessDelta(+1f);
+        if (_draw.IsEnabled && _draw.StickerMode) _draw.StickerSizeDelta(+8f);
+        else if (_draw.IsEnabled) _draw.ThicknessDelta(+1f);
         break;
       case Key.Comma:
         if (_draw.IsEnabled) _draw.CycleColor();
@@ -162,7 +172,28 @@ public sealed class InputHandler
         if (_draw.IsEnabled) _draw.Hide = !_draw.Hide;
         break;
       case Key.T:
-        if (_draw.IsEnabled) _draw.StampMode = !_draw.StampMode;
+        if (_draw.IsEnabled) { _draw.StampMode = !_draw.StampMode; if (_draw.StampMode) _draw.StickerMode = false; }
+        break;
+      case Key.Y:
+        _draw.StickerMode = !_draw.StickerMode;
+        if (_draw.StickerMode)
+        {
+          _draw.IsEnabled = true;
+          _draw.StampMode = false;
+          _flashlight.IsEnabled = false;
+          _picker.IsEnabled = false;
+          if (_stickerState.Current == null) _stickerState.RefreshFrom(_stickers);
+        }
+        break;
+      case Key.Semicolon:
+      case Key.Tab:
+        if (_draw.IsEnabled && _draw.StickerMode)
+          _stickerState.CycleSticker(_stickers, _shift ? -1 : +1);
+        break;
+      case Key.Apostrophe:
+      case Key.GraveAccent:
+        if (_draw.IsEnabled && _draw.StickerMode)
+          _stickerState.CycleCategory(_stickers, _shift ? -1 : +1);
         break;
 
       case Key.B:
@@ -224,7 +255,7 @@ public sealed class InputHandler
       return;
     }
 
-    if (_draw.IsEnabled && !_draw.StampMode && _mouse.Drag && !_spacePan)
+    if (_draw.IsEnabled && !_draw.StampMode && !_draw.StickerMode && _mouse.Drag && !_spacePan)
     {
       _draw.Move(_mouse.Current, new Vector2(_screenshot.Width, _screenshot.Height),
                  _screenshot, _camera, Mirror);
@@ -258,6 +289,13 @@ public sealed class InputHandler
     if (button == MouseButton.Left && _exporter.Active)
     {
       _exporter.BeginDrag(_mouse.Current);
+      return;
+    }
+
+    if (button == MouseButton.Left && _draw.IsEnabled && _draw.StickerMode && _stickerState.Current != null && !_space)
+    {
+      _draw.DropSticker(_mouse.Current, new Vector2(_screenshot.Width, _screenshot.Height),
+                        _screenshot, _camera, Mirror, _stickerState.Current.Path);
       return;
     }
 
@@ -308,7 +346,7 @@ public sealed class InputHandler
     if (button == MouseButton.Left)
     {
       if (_exporter.Dragging) _exporter.Finish();
-      if (_draw.IsEnabled && !_draw.StampMode && !_spacePan) _draw.End();
+      if (_draw.IsEnabled && !_draw.StampMode && !_draw.StickerMode && !_spacePan) _draw.End();
       _spacePan = false;
       _mouse.Drag = false;
     }
@@ -323,6 +361,7 @@ public sealed class InputHandler
   private void ScrollUp()
   {
     if (_ctrl && _flashlight.IsEnabled) { _flashlight.DeltaRadius += Flashlight.InitialDeltaRadius; }
+    else if (_ctrl && _draw.IsEnabled && _draw.StickerMode) { _draw.StickerSizeDelta(+16f); }
     else if (_ctrl && _draw.IsEnabled) { _draw.ThicknessDelta(+1f); }
     else
     {
@@ -334,6 +373,7 @@ public sealed class InputHandler
   private void ScrollDown()
   {
     if (_ctrl && _flashlight.IsEnabled) { _flashlight.DeltaRadius -= Flashlight.InitialDeltaRadius; }
+    else if (_ctrl && _draw.IsEnabled && _draw.StickerMode) { _draw.StickerSizeDelta(-16f); }
     else if (_ctrl && _draw.IsEnabled) { _draw.ThicknessDelta(-1f); }
     else
     {

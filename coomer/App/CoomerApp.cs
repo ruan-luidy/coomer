@@ -10,6 +10,7 @@ using Coomer.Features.Lighting;
 using Coomer.Features.Input;
 using Coomer.Features.Rendering;
 using Coomer.Features.Drawing;
+using Coomer.Features.Stickers;
 
 namespace Coomer.App;
 
@@ -29,6 +30,8 @@ public sealed class CoomerApp
   private ColorPicker _picker = null!;
   private DrawTool _draw = null!;
   private RegionExporter _exporter = null!;
+  private StickerCache _stickers = null!;
+  private StickerState _stickerState = null!;
   private float _frameRate = 60f;
   private nint _hwnd;
   private int _frames;
@@ -81,9 +84,19 @@ public sealed class CoomerApp
     _picker = new ColorPicker();
     _draw = new DrawTool();
     _exporter = new RegionExporter();
+
+    var stickerDir = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "coomer", "stickers");
+    _stickers = new StickerCache(_gl, stickerDir);
+    _stickers.Reload();
+    _stickerState = new StickerState();
+    _stickerState.RefreshFrom(_stickers);
+
     _renderer = new Renderer(_gl, _screenshot);
     _handler = new InputHandler(_input, _camera, _flashlight, _config, _screenshot,
-                                _configPath, _frameRate, _picker, _draw, _exporter);
+                                _configPath, _frameRate, _picker, _draw, _exporter,
+                                _stickers, _stickerState);
 
     if (_window.Native?.Win32 is { } win32)
       _hwnd = win32.Hwnd;
@@ -116,7 +129,8 @@ public sealed class CoomerApp
 
     var windowSize = new Vector2(_screenshot.Width, _screenshot.Height);
     _renderer.Draw(_camera, _flashlight, _config, _handler.Mirror, windowSize,
-                   _handler.CursorPosition, _draw, _picker.History, _exporter);
+                   _handler.CursorPosition, _draw, _picker.History, _exporter,
+                   _stickers, _stickerState);
 
     // Depois do Draw e antes do swap: framebuffer ja tem o composite final.
     int yOff = _window.FramebufferSize.Y - _screenshot.Height;
@@ -140,6 +154,7 @@ public sealed class CoomerApp
   {
     _handler?.RestoreCursor();
     _renderer?.Dispose();
+    _stickers?.Dispose();
     _input?.Dispose();
   }
 }
