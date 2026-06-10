@@ -330,24 +330,43 @@ public sealed class DrawTool
       if (A <= C) { ux = 1; uy = 0; } else { ux = 0; uy = 1; }
     }
 
-    // De volta pra escala/origem.
     float majorImg = (float)(semiMajor * scale);
     float minorImg = (float)(semiMinor * scale);
     if (majorImg < 12f || minorImg < 4f || majorImg > 10f * minorImg) return false;
 
-    // RMS algebrico no espaco normalizado pra sanity-check.
-    double rss = 0;
-    foreach (var p in pts)
+    // Quality check no frame da elipse: (x'/a)^2 + (y'/b)^2 deveria ser ~1 em
+    // todo ponto. max controla picos (canto de quadrado quebra aqui) e rms
+    // controla qualidade media. Tambem cumulamos a varredura angular pra
+    // rejeitar arcos abertos que casualmente fitam.
+    double maxDev = 0, rmsDev = 0, sweep = 0, prevAng = 0;
+    double cxImg = cx * scale + mx;
+    double cyImg = cy * scale + my;
+    for (int i = 0; i < n; i++)
     {
-      double x = (p.X - mx) * invS;
-      double y = (p.Y - my) * invS;
-      double r = A * x * x + B * x * y + C * y * y + D * x + E * y + F;
-      rss += r * r;
+      double dx = pts[i].X - cxImg;
+      double dy = pts[i].Y - cyImg;
+      double xp = (dx * ux + dy * uy) / majorImg;
+      double yp = (-dx * uy + dy * ux) / minorImg;
+      double r = xp * xp + yp * yp - 1.0;
+      double abs = Math.Abs(r);
+      if (abs > maxDev) maxDev = abs;
+      rmsDev += r * r;
+      double ang = Math.Atan2(yp, xp);
+      if (i > 0)
+      {
+        double diff = ang - prevAng;
+        if (diff > Math.PI) diff -= 2 * Math.PI;
+        else if (diff < -Math.PI) diff += 2 * Math.PI;
+        sweep += diff;
+      }
+      prevAng = ang;
     }
-    double normFactor = Math.Max(Math.Abs(Fc), 1e-6);
-    if (Math.Sqrt(rss / n) / normFactor > 0.5) return false;
+    rmsDev = Math.Sqrt(rmsDev / n);
+    if (maxDev > 0.35) return false;
+    if (rmsDev > 0.18) return false;
+    if (Math.Abs(sweep) < Math.PI * 1.55) return false;
 
-    center = new Vector2((float)(cx * scale + mx), (float)(cy * scale + my));
+    center = new Vector2((float)cxImg, (float)cyImg);
     axA = new Vector2((float)(ux * majorImg), (float)(uy * majorImg));
     axB = new Vector2((float)(-uy * minorImg), (float)(ux * minorImg));
     return true;

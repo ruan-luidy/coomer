@@ -56,7 +56,8 @@ public sealed unsafe class StrokeRenderer : IDisposable
   }
 
   public void Draw(DrawTool tool, Camera camera, bool mirror, Vector2 windowSize,
-                   Screenshot shot, Vector2 cursorScreen, ColorHistory? history)
+                   Screenshot shot, Vector2 cursorScreen, ColorHistory? history,
+                   RegionExporter? exporter)
   {
     bool wantsBrushRing = tool.IsEnabled && !tool.StampMode;
     bool wantsStamps = !tool.Hide && tool.Stamps.Count > 0;
@@ -73,6 +74,17 @@ public sealed unsafe class StrokeRenderer : IDisposable
     _shader.SetVec2("windowSize", windowSize);
     _shader.SetVec2("screenshotSize", screenshotSize);
     _shader.SetInt("mirror", mirror ? 1 : 0);
+
+    bool invertActive = exporter != null && exporter.Dragging;
+    _shader.SetInt("invertRect", invertActive ? 1 : 0);
+    _shader.SetVec2("fragWindowSize", windowSize);
+    if (invertActive)
+    {
+      var a = exporter!.Start;
+      var b = exporter.End;
+      _shader.SetVec2("invertMin", new Vector2(MathF.Min(a.X, b.X), MathF.Min(a.Y, b.Y)));
+      _shader.SetVec2("invertMax", new Vector2(MathF.Max(a.X, b.X), MathF.Max(a.Y, b.Y)));
+    }
 
     _gl.BindVertexArray(_vao);
     _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _vbo);

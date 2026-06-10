@@ -6,7 +6,11 @@ in mediump float vHalf;
 out mediump vec4 color;
 uniform vec4 uColor;
 
-// Distancia de p ao segmento AB. h=0 quando A==B (vira distancia ate ponto).
+uniform bool invertRect;
+uniform vec2 invertMin;
+uniform vec2 invertMax;
+uniform vec2 fragWindowSize;
+
 float distSeg(vec2 p, vec2 a, vec2 b) {
     vec2 ba = b - a;
     float l2 = dot(ba, ba);
@@ -18,11 +22,17 @@ float distSeg(vec2 p, vec2 a, vec2 b) {
 void main()
 {
     float d = distSeg(vPosImg, vA, vB);
-    // fwidth(d) = quantos units-de-imagem por pixel de tela na vizinhanca do
-    // fragmento. Usar isso pro smoothstep da uma banda AA de ~2 pixels em
-    // qualquer zoom, sem precisar saber cameraScale aqui.
     float aa = max(fwidth(d), 0.0001);
     float alpha = 1.0 - smoothstep(vHalf - aa, vHalf + aa, d);
     if (alpha <= 0.001) discard;
-    color = vec4(uColor.rgb, uColor.a * alpha);
+
+    vec3 rgb = uColor.rgb;
+    if (invertRect)
+    {
+        vec2 fs = vec2(gl_FragCoord.x, fragWindowSize.y - gl_FragCoord.y);
+        if (fs.x >= invertMin.x && fs.x <= invertMax.x
+            && fs.y >= invertMin.y && fs.y <= invertMax.y)
+            rgb = 1.0 - rgb;
+    }
+    color = vec4(rgb, uColor.a * alpha);
 }

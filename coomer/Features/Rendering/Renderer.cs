@@ -129,7 +129,7 @@ public sealed unsafe class Renderer : IDisposable
     _gl.BindVertexArray(_vao);
     _gl.DrawElements(PrimitiveType.Triangles, 6, DrawElementsType.UnsignedInt, (void*)0);
 
-    _strokes.Draw(drawTool, camera, mirror, windowSize, _screenshot, cursor, history);
+    _strokes.Draw(drawTool, camera, mirror, windowSize, _screenshot, cursor, history, exporter);
   }
 
   public void Dispose()
