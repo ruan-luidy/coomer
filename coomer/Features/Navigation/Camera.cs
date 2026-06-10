@@ -65,7 +65,7 @@ public sealed class Camera
       DeltaScale -= DeltaScale * dt * config.ScaleFriction;
     }
 
-    if (!dragging && Velocity.Length() > VelocityThreshold)
+    if (config.PanInertia && !dragging && Velocity.Length() > VelocityThreshold)
     {
       Position += Velocity * dt;
       Velocity -= Velocity * dt * config.DragFriction;

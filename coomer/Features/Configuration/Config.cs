@@ -18,6 +18,7 @@ public sealed class Config
   public bool LerpCameraRecenter { get; set; } = true;     // tecla 0 / middle-click anima ate o centro
   public float CameraRecenterLerpSpeed { get; set; } = 6.0f;
   public bool HideCursorOnFlashlight { get; set; } = true;
+  public bool PanInertia { get; set; } = true;             // false = imagem para junto com o mouse (sem deslize)
 
   // Flashlight com fisica de bolha (mola + amortecimento + deformacao).
   // Mesmos defaults do zoomer original — calibrados pra parecer natural com
@@ -76,6 +77,7 @@ public sealed class Config
         case "lerp_camera_recenter": config.LerpCameraRecenter = ParseBool(value); break;
         case "camera_recenter_lerp_speed": config.CameraRecenterLerpSpeed = ParseFloat(value); break;
         case "hide_cursor_on_flashlight": config.HideCursorOnFlashlight = ParseBool(value); break;
+        case "pan_inertia": config.PanInertia = ParseBool(value); break;
 
         case "bubble_mass": config.BubbleMass = ParseFloat(value); break;
         case "bubble_spring_k": config.BubbleSpringK = ParseFloat(value); break;
@@ -113,6 +115,7 @@ public sealed class Config
     LerpCameraRecenter = fresh.LerpCameraRecenter;
     CameraRecenterLerpSpeed = fresh.CameraRecenterLerpSpeed;
     HideCursorOnFlashlight = fresh.HideCursorOnFlashlight;
+    PanInertia = fresh.PanInertia;
 
     BubbleMass = fresh.BubbleMass;
     BubbleSpringK = fresh.BubbleSpringK;
@@ -149,6 +152,7 @@ public sealed class Config
     w.WriteLine($"lerp_camera_recenter = {(LerpCameraRecenter ? "true" : "false")}");
     w.WriteLine($"camera_recenter_lerp_speed = {CameraRecenterLerpSpeed.ToString(c)}");
     w.WriteLine($"hide_cursor_on_flashlight = {(HideCursorOnFlashlight ? "true" : "false")}");
+    w.WriteLine($"pan_inertia = {(PanInertia ? "true" : "false")}");
 
     w.WriteLine($"bubble_mass = {BubbleMass.ToString(c)}");
     w.WriteLine($"bubble_spring_k = {BubbleSpringK.ToString(c)}");

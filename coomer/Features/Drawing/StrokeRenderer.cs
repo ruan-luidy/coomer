@@ -139,8 +139,12 @@ public sealed unsafe class StrokeRenderer : IDisposable
           EmitSeg(s.Points[0], s.Points[0], h, verts);
           break;
         }
-        for (int i = 0; i < s.Points.Count - 1; i++)
-          EmitSeg(s.Points[i], s.Points[i + 1], h, verts);
+        if (s.Points.Count == 2)
+        {
+          EmitSeg(s.Points[0], s.Points[1], h, verts);
+          break;
+        }
+        EmitSmoothFree(s.Points, h, verts);
         break;
 
       case DrawShape.Line:
@@ -164,6 +168,48 @@ public sealed unsafe class StrokeRenderer : IDisposable
         }
         break;
     }
+  }
+
+  // Traco livre suave: passa uma spline Catmull-Rom pelos pontos amostrados do
+  // mouse em vez de ligar com retas. Cada span P1->P2 usa P0 e P3 como tangentes
+  // (pontas clampadas pra ela mesma), e e subdividido por comprimento pra manter
+  // a curvatura lisa sem tesselar demais em tracos longos. Custo zero de lag: a
+  // suavidade e puramente geometrica, nao adia o tempo do tracado.
+  private static void EmitSmoothFree(List<Vector2> pts, float h, List<float> v)
+  {
+    int count = pts.Count;
+    for (int i = 0; i < count - 1; i++)
+    {
+      var p0 = pts[i == 0 ? 0 : i - 1];
+      var p1 = pts[i];
+      var p2 = pts[i + 1];
+      var p3 = pts[i + 2 >= count ? count - 1 : i + 2];
+
+      float segLen = (p2 - p1).Length();
+      int sub = Math.Clamp((int)(segLen / 3f), 1, 24);
+
+      var prev = p1;
+      for (int k = 1; k <= sub; k++)
+      {
+        float t = (float)k / sub;
+        var cur = CatmullRom(p0, p1, p2, p3, t);
+        EmitSeg(prev, cur, h, v);
+        prev = cur;
+      }
+    }
+  }
+
+  // Catmull-Rom uniforme (tensao 0.5): a curva passa por p1 e p2 com tangentes
+  // dadas pelos vizinhos. t em [0,1] no span p1->p2.
+  private static Vector2 CatmullRom(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, float t)
+  {
+    float t2 = t * t;
+    float t3 = t2 * t;
+    return 0.5f * (
+        2f * p1
+      + (p2 - p0) * t
+      + (2f * p0 - 5f * p1 + 4f * p2 - p3) * t2
+      + (3f * p1 - 3f * p2 + p3 - p0) * t3);
   }
 
   // Constroi um quad cobrindo a area de influencia do segmento (halfWidth + pad
