@@ -29,6 +29,8 @@ public sealed class Config
   public float BubbleStretchFactor { get; set; } = 0.0001f;
   public float BubbleSqueezeFactor { get; set; } = 0.5f;
   public float BubbleDeformSmoothing { get; set; } = 8.0f;
+  /// <summary>True = lanterna cola no cursor sem mola/lerp/deformacao (rigid mode).</summary>
+  public bool BubbleRigid { get; set; } = false;
 
   // Blur do fundo (toda a tela atras do zoom) e blur fora da lanterna.
   public bool BlurBackground { get; set; } = false;
@@ -85,6 +87,7 @@ public sealed class Config
         case "bubble_stretch_factor": config.BubbleStretchFactor = ParseFloat(value); break;
         case "bubble_squeeze_factor": config.BubbleSqueezeFactor = ParseFloat(value); break;
         case "bubble_deform_smoothing": config.BubbleDeformSmoothing = ParseFloat(value); break;
+        case "bubble_rigid": config.BubbleRigid = ParseBool(value); break;
 
         case "blur_background": config.BlurBackground = ParseBool(value); break;
         case "background_blur_radius": config.BackgroundBlurRadius = ParseFloat(value); break;
@@ -123,6 +126,7 @@ public sealed class Config
     BubbleStretchFactor = fresh.BubbleStretchFactor;
     BubbleSqueezeFactor = fresh.BubbleSqueezeFactor;
     BubbleDeformSmoothing = fresh.BubbleDeformSmoothing;
+    BubbleRigid = fresh.BubbleRigid;
 
     BlurBackground = fresh.BlurBackground;
     BackgroundBlurRadius = fresh.BackgroundBlurRadius;
@@ -160,6 +164,7 @@ public sealed class Config
     w.WriteLine($"bubble_stretch_factor = {BubbleStretchFactor.ToString(c)}");
     w.WriteLine($"bubble_squeeze_factor = {BubbleSqueezeFactor.ToString(c)}");
     w.WriteLine($"bubble_deform_smoothing = {BubbleDeformSmoothing.ToString(c)}");
+    w.WriteLine($"bubble_rigid = {(BubbleRigid ? "true" : "false")}");
 
     w.WriteLine($"blur_background = {(BlurBackground ? "true" : "false")}");
     w.WriteLine($"background_blur_radius = {BackgroundBlurRadius.ToString(c)}");

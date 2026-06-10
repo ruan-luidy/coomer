@@ -31,7 +31,16 @@ public sealed class Flashlight
       DeltaRadius -= DeltaRadius * DeltaRadiusDeceleration * dt;
     }
 
-    if (IsEnabled)
+    if (IsEnabled && config.BubbleRigid)
+    {
+      // Modo rigido: bolha cola no cursor sem mola/amortecimento. Mantem so a
+      // animacao do raio e da sombra; deformacao zerada.
+      Position = cursor;
+      Velocity = Vector2.Zero;
+      Stretch = Vector2.Zero;
+      Squeeze = 0f;
+    }
+    else if (IsEnabled)
     {
       var displacement = Position - cursor;
       var spring = displacement * -config.BubbleSpringK;

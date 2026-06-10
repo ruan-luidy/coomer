@@ -88,6 +88,8 @@ The config file lives at `%APPDATA%\coomer\config` with the format:
 | scroll_speed   | How quickly scrolling zooms in/out                   |
 | drag_friction  | How quickly panning slows down after a drag          |
 | scale_friction | How quickly zooming slows down after scrolling       |
+| pan_inertia    | `false` = image stops with the mouse (no glide)      |
+| bubble_rigid   | `true` = flashlight snaps to cursor (no spring lerp/deform) |
 
 ## Differences from boomer
 
