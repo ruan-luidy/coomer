@@ -9,10 +9,6 @@ using Coomer.App;
 
 namespace Coomer.Features.Input;
 
-/// <summary>
-/// Porte do bloco de eventos de boomer.nim (KeyPress/ButtonPress/MotionNotify).
-/// Liga o teclado/mouse do Silk.NET ao estado da camera, lanterna e mirror.
-/// </summary>
 public sealed class InputHandler
 {
   private readonly Camera _camera;
@@ -23,9 +19,11 @@ public sealed class InputHandler
   private readonly float _frameRate;
   private readonly ColorPicker _picker;
   private readonly DrawTool _draw;
+  private readonly RegionExporter _exporter;
 
   private Mouse _mouse;
   private bool _ctrl;
+  private bool _shift;
   private bool _flashlightCursorHidden;
 
   public bool Quitting { get; private set; }
@@ -34,10 +32,12 @@ public sealed class InputHandler
   public bool Dragging => _mouse.Drag;
   public ColorPicker Picker => _picker;
   public DrawTool Draw => _draw;
+  public RegionExporter Exporter => _exporter;
 
   public InputHandler(IInputContext input, Camera camera, Flashlight flashlight,
                       Config config, Screenshot screenshot, string configPath,
-                      float frameRate, ColorPicker picker, DrawTool draw)
+                      float frameRate, ColorPicker picker, DrawTool draw,
+                      RegionExporter exporter)
   {
     _camera = camera;
     _flashlight = flashlight;
@@ -47,6 +47,7 @@ public sealed class InputHandler
     _frameRate = frameRate;
     _picker = picker;
     _draw = draw;
+    _exporter = exporter;
 
     foreach (var keyboard in input.Keyboards)
     {
@@ -62,7 +63,6 @@ public sealed class InputHandler
     }
   }
 
-  /// <summary>Chamado todo frame pelo CoomerApp pra sincronizar o cursor.</summary>
   public void Tick()
   {
     bool wantHide = _flashlight.IsEnabled && _config.HideCursorOnFlashlight;
@@ -71,9 +71,9 @@ public sealed class InputHandler
       OverlayWindowNative.SetCursorVisible(!wantHide);
       _flashlightCursorHidden = wantHide;
     }
+    _draw.ShiftHeld = _shift;
   }
 
-  /// <summary>Restaura cursor ao sair do overlay (CoomerApp chama em OnClosing).</summary>
   public void RestoreCursor()
   {
     if (_flashlightCursorHidden)
@@ -92,15 +92,15 @@ public sealed class InputHandler
         _ctrl = true;
         break;
 
+      case Key.ShiftLeft:
+      case Key.ShiftRight:
+        _shift = true;
+        break;
+
       case Key.Number0:
         _camera.Reset(_config.LerpCameraRecenter);
         Mirror = false;
         break;
-
-      // Q/Esc fecham o overlay no KeyUp (ver OnKeyUp), nao aqui: se fechasse no KeyDown e
-      // o usuario segurasse a tecla, o auto-repeat do Windows mandaria os KeyDown seguintes
-      // pra janela de baixo (ex.: um video em fullscreen), que sairia do fullscreen. Mantendo
-      // o overlay vivo ate soltar, o coomer consome todos os eventos e nada vaza.
 
       case Key.R:
         if (File.Exists(_configPath))
@@ -108,7 +108,6 @@ public sealed class InputHandler
         break;
 
       case Key.M:
-        // Ancora o espelhamento no cursor (mesma conta do boomer.nim).
         _camera.Position.X += _screenshot.Width / _camera.Scale
                             - 2f * (_mouse.Current.X / _camera.Scale + _camera.Position.X);
         Mirror = !Mirror;
@@ -122,23 +121,21 @@ public sealed class InputHandler
       case Key.C:
       case Key.P:
         _picker.IsEnabled = !_picker.IsEnabled;
-        if (_picker.IsEnabled && _flashlight.IsEnabled)
-          _flashlight.IsEnabled = false; // picker e lanterna sao mutuamente exclusivos
+        if (_picker.IsEnabled && _flashlight.IsEnabled) _flashlight.IsEnabled = false;
         if (_picker.IsEnabled) _draw.IsEnabled = false;
         break;
 
-      // ========= drawing =========
       case Key.D:
         _draw.IsEnabled = !_draw.IsEnabled;
         if (_draw.IsEnabled)
         {
-          // exclusivo com flashlight/picker — todos competem pelo left-click.
           _flashlight.IsEnabled = false;
           _picker.IsEnabled = false;
         }
         break;
       case Key.S:
-        if (_draw.IsEnabled) _draw.CycleShape();
+        if (_ctrl) _exporter.RequestSaveFull();
+        else if (_draw.IsEnabled) _draw.CycleShape();
         break;
       case Key.Z:
         if (_draw.IsEnabled) _draw.Undo();
@@ -154,6 +151,21 @@ public sealed class InputHandler
         break;
       case Key.Comma:
         if (_draw.IsEnabled) _draw.CycleColor();
+        break;
+      case Key.V:
+        if (_draw.IsEnabled) _draw.Hide = !_draw.Hide;
+        break;
+      case Key.T:
+        if (_draw.IsEnabled) _draw.StampMode = !_draw.StampMode;
+        break;
+
+      case Key.B:
+        _exporter.ToggleCopy();
+        if (_exporter.Active)
+        {
+          _draw.IsEnabled = false;
+          _picker.IsEnabled = false;
+        }
         break;
 
       case Key.H:
@@ -185,17 +197,27 @@ public sealed class InputHandler
 
   private void OnKeyUp(IKeyboard keyboard, Key key, int scancode)
   {
-    if (key is Key.ControlLeft or Key.ControlRight)
-      _ctrl = false;
+    if (key is Key.ControlLeft or Key.ControlRight) _ctrl = false;
+    else if (key is Key.ShiftLeft or Key.ShiftRight) _shift = false;
     else if (key is Key.Q or Key.Escape)
+    {
+      if (_exporter.Active) { _exporter.Cancel(); return; }
       Quitting = true;
+    }
   }
 
   private void OnMouseMove(IMouse mouse, Vector2 position)
   {
     _mouse.Current = position;
 
-    if (_draw.IsEnabled && _mouse.Drag)
+    if (_exporter.Dragging)
+    {
+      _exporter.Move(_mouse.Current);
+      _mouse.Previous = _mouse.Current;
+      return;
+    }
+
+    if (_draw.IsEnabled && !_draw.StampMode && _mouse.Drag)
     {
       _draw.Move(_mouse.Current, new Vector2(_screenshot.Width, _screenshot.Height),
                  _screenshot, _camera, Mirror);
@@ -207,9 +229,8 @@ public sealed class InputHandler
     {
       var delta = _camera.World(_mouse.Previous) - _camera.World(_mouse.Current);
       _camera.Position += delta;
-      // delta e a distancia percorrida em 1 frame; * fps vira unidades/segundo.
       _camera.Velocity = delta * _frameRate;
-      _camera.LerpingToTarget = false; // arrastar cancela o lerp do reset
+      _camera.LerpingToTarget = false;
     }
 
     _mouse.Previous = _mouse.Current;
@@ -227,6 +248,19 @@ public sealed class InputHandler
       return;
     }
 
+    if (button == MouseButton.Left && _exporter.Active)
+    {
+      _exporter.BeginDrag(_mouse.Current);
+      return;
+    }
+
+    if (button == MouseButton.Left && _draw.IsEnabled && _draw.StampMode)
+    {
+      _draw.DropStamp(_mouse.Current, new Vector2(_screenshot.Width, _screenshot.Height),
+                      _screenshot, _camera, Mirror);
+      return;
+    }
+
     if (button == MouseButton.Left && _draw.IsEnabled)
     {
       _mouse.Previous = _mouse.Current;
@@ -241,7 +275,7 @@ public sealed class InputHandler
       _mouse.Previous = _mouse.Current;
       _mouse.Drag = true;
       _camera.Velocity = Vector2.Zero;
-      _camera.LerpingToTarget = false; // cancela lerp ao comecar drag
+      _camera.LerpingToTarget = false;
     }
 
     else if (button == MouseButton.Middle)
@@ -255,7 +289,8 @@ public sealed class InputHandler
   {
     if (button == MouseButton.Left)
     {
-      if (_draw.IsEnabled) _draw.End();
+      if (_exporter.Dragging) _exporter.Finish();
+      if (_draw.IsEnabled && !_draw.StampMode) _draw.End();
       _mouse.Drag = false;
     }
   }
@@ -268,14 +303,8 @@ public sealed class InputHandler
 
   private void ScrollUp()
   {
-    if (_ctrl && _flashlight.IsEnabled)
-    {
-      _flashlight.DeltaRadius += Flashlight.InitialDeltaRadius;
-    }
-    else if (_ctrl && _draw.IsEnabled)
-    {
-      _draw.ThicknessDelta(+1f);
-    }
+    if (_ctrl && _flashlight.IsEnabled) { _flashlight.DeltaRadius += Flashlight.InitialDeltaRadius; }
+    else if (_ctrl && _draw.IsEnabled) { _draw.ThicknessDelta(+1f); }
     else
     {
       _camera.DeltaScale += _config.ScrollSpeed;
@@ -285,14 +314,8 @@ public sealed class InputHandler
 
   private void ScrollDown()
   {
-    if (_ctrl && _flashlight.IsEnabled)
-    {
-      _flashlight.DeltaRadius -= Flashlight.InitialDeltaRadius;
-    }
-    else if (_ctrl && _draw.IsEnabled)
-    {
-      _draw.ThicknessDelta(-1f);
-    }
+    if (_ctrl && _flashlight.IsEnabled) { _flashlight.DeltaRadius -= Flashlight.InitialDeltaRadius; }
+    else if (_ctrl && _draw.IsEnabled) { _draw.ThicknessDelta(-1f); }
     else
     {
       _camera.DeltaScale -= _config.ScrollSpeed;
@@ -300,8 +323,6 @@ public sealed class InputHandler
     }
   }
 
-  // STA-free: pipa o texto pro "clip" do Windows via cmd. Zero deps,
-  // e nao precisa de [STAThread] (necessario para Clipboard.SetText).
   private static void TryCopyToClipboard(string text)
   {
     try
@@ -320,6 +341,6 @@ public sealed class InputHandler
         p.WaitForExit(500);
       }
     }
-    catch { /* best-effort: se falhar, o LastHex ainda fica disponivel */ }
+    catch { }
   }
 }

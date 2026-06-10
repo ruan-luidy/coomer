@@ -5,30 +5,25 @@ using Coomer.Features.Hotkey;
 using Silk.NET.Windowing.Glfw;
 using Silk.NET.Input.Glfw;
 
-// Instancia unica: se ja tem um coomer rodando, sai (senao o RegisterHotKey conflita).
+// Instancia unica — senao RegisterHotKey conflita.
 using var singleton = new Mutex(true, "coomer-singleton", out bool isNew);
 if (!isNew)
   return;
 
-// Registra o backend GLFW na mao (necessario fora do dotnet run / em publish).
+// Backend GLFW na mao (necessario em publish, fora do dotnet run).
 GlfwWindowing.RegisterPlatform();
 GlfwInput.RegisterPlatform();
 
-// DPI awareness antes de qualquer captura/janela.
 Screenshot.EnableDpiAwareness();
 
 string configDir = Path.Combine(
     Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "coomer");
 string configPath = Path.Combine(configDir, "config");
 
-// coomer fica residente em segundo plano. Ctrl+Alt+Z abre o overlay (recapturando a
-// tela e recarregando a config na hora); Ctrl+Alt+Q encerra. q/ESC fecha so o overlay.
 new HotkeyHost().Run(onShow: () =>
 {
   try
   {
-    // Config quebrada (linha invalida / chave desconhecida) nao deve impedir o overlay
-    // de abrir — cai pro default em vez de lancar.
     Config config;
     try { config = File.Exists(configPath) ? Config.Load(configPath) : Config.Default(); }
     catch { config = Config.Default(); }
@@ -37,7 +32,6 @@ new HotkeyHost().Run(onShow: () =>
   }
   catch
   {
-    // Qualquer falha ao abrir/rodar o overlay (captura, GL, etc.) nao pode derrubar o
-    // processo residente; o usuario so tenta de novo no proximo Ctrl+Alt+Z.
+    // Falha no overlay nao pode derrubar o processo residente.
   }
 });

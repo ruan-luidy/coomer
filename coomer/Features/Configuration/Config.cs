@@ -2,49 +2,35 @@ using System.Globalization;
 
 namespace Coomer.Features.Configuration;
 
-/// <summary>
-/// Porte de <c>config.nim</c>. Parametros de zoom/pan lidos de um arquivo
-/// texto simples no formato <c>chave = valor</c> (linhas com <c>#</c> sao comentarios).
-/// </summary>
+// Config simples chave=valor em %APPDATA%/coomer/config.
 public sealed class Config
 {
-  public float MinScale { get; set; } = 1.0f; // 1.0 = nao deixa encolher abaixo da tela cheia
+  public float MinScale { get; set; } = 1.0f;
   public float ScrollSpeed { get; set; } = 1.5f;
   public float DragFriction { get; set; } = 6.0f;
   public float ScaleFriction { get; set; } = 4.0f;
 
-  // Pan por teclado, reset animado e ocultar curosr com a lanterna.
-  public float CameraPanAmount { get; set; } = 200.0f;     // px por tecla (H/J/K/L, setas)
-  public bool LerpCameraRecenter { get; set; } = true;     // tecla 0 / middle-click anima ate o centro
+  public float CameraPanAmount { get; set; } = 200.0f;
+  public bool LerpCameraRecenter { get; set; } = true;
   public float CameraRecenterLerpSpeed { get; set; } = 6.0f;
   public bool HideCursorOnFlashlight { get; set; } = true;
-  public bool PanInertia { get; set; } = true;             // false = imagem para junto com o mouse (sem deslize)
+  public bool PanInertia { get; set; } = true;
 
-  // Flashlight com fisica de bolha (mola + amortecimento + deformacao).
-  // Mesmos defaults do zoomer original — calibrados pra parecer natural com
-  // a conta correta de elipse no shader.
   public float BubbleMass { get; set; } = 1.0f;
   public float BubbleSpringK { get; set; } = 80.0f;
   public float BubbleDamping { get; set; } = 8.0f;
   public float BubbleStretchFactor { get; set; } = 0.0001f;
   public float BubbleSqueezeFactor { get; set; } = 0.5f;
   public float BubbleDeformSmoothing { get; set; } = 8.0f;
-  /// <summary>True = lanterna cola no cursor sem mola/lerp/deformacao (rigid mode).</summary>
   public bool BubbleRigid { get; set; } = false;
 
-  // Blur do fundo (toda a tela atras do zoom) e blur fora da lanterna.
   public bool BlurBackground { get; set; } = false;
   public float BackgroundBlurRadius { get; set; } = 6.0f;
   public bool BlurOutsideFlashlight { get; set; } = false;
   public float OutsideFlashlightBlurRadius { get; set; } = 6.0f;
 
-  // Modo fisheye: troca a refracao de gota de vidro por um barrel
-  // (lente olho-de-peixe) — magnifica o miolo e mantem o anel/sombra.
   public bool FlashlightFisheye { get; set; } = false;
   public float FisheyeStrength { get; set; } = 0.5f;
-
-  // Modo vidro claro: lupa de leitura — nucleo de zoom uniforme (sem curvar
-  // linha) + transicao suave nos ~30% da borda pra fechar com o anel.
   public bool FlashlightClearGlass { get; set; } = false;
   public float ClearGlassZoom { get; set; } = 1.10f;
 
@@ -105,7 +91,6 @@ public sealed class Config
     return config;
   }
 
-  /// <summary>Recarrega os valores deste objeto a partir do arquivo (usado na tecla R).</summary>
   public void Reload(string path)
   {
     var fresh = Load(path);

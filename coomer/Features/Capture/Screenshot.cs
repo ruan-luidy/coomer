@@ -1,11 +1,6 @@
 namespace Coomer.Features.Capture;
 
-/// <summary>
-/// Porte de <c>screenshot.nim</c>. Captura UMA vez (modo padrao do boomer) via GDI
-/// <c>BitBlt</c> e devolve os pixels em BGRA, top-down — formato que casa direto com o
-/// <c>GL_BGRA</c> usado no upload da textura. Guarda tambem a origem (OriginX/Y) do
-/// monitor capturado, para a janela abrir exatamente em cima dele.
-/// </summary>
+// Captura unica via GDI BitBlt. Pixels BGRA top-down (casa com GL_BGRA).
 public sealed unsafe class Screenshot
 {
   public int Width { get; }
@@ -23,11 +18,10 @@ public sealed unsafe class Screenshot
     Pixels = pixels;
   }
 
-  /// <summary>Liga DPI awareness. DEVE ser chamado antes de qualquer janela/captura.</summary>
+  // Chamar antes de qualquer janela/captura.
   public static void EnableDpiAwareness()
       => Native.SetProcessDpiAwarenessContext(Native.DpiPerMonitorAwareV2);
 
-  /// <summary>Captura apenas o monitor onde o cursor esta (evita juntar os 2 monitores).</summary>
   public static Screenshot CaptureMonitorUnderCursor()
   {
     Native.GetCursorPos(out Point cursor);
@@ -78,7 +72,6 @@ public sealed unsafe class Screenshot
     return new Screenshot(x, y, w, h, pixels);
   }
 
-  /// <summary>Pega o pixel em (x,y) e devolve "#RRGGBB". Layout BGRA top-down.</summary>
   public string GetPixelHex(int x, int y)
   {
     int i = (y * Width + x) * 4;

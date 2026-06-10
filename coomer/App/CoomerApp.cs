@@ -13,10 +13,6 @@ using Coomer.Features.Drawing;
 
 namespace Coomer.App;
 
-/// <summary>
-/// Host da aplicacao: cria a janela borderless/topmost cobrindo a tela, abre o
-/// contexto GL e roda o loop. E o equivalente ao <c>main()</c> de boomer.nim.
-/// </summary>
 public sealed class CoomerApp
 {
   private readonly Config _config;
@@ -32,6 +28,7 @@ public sealed class CoomerApp
   private Flashlight _flashlight = null!;
   private ColorPicker _picker = null!;
   private DrawTool _draw = null!;
+  private RegionExporter _exporter = null!;
   private float _frameRate = 60f;
   private nint _hwnd;
   private int _frames;
@@ -45,23 +42,19 @@ public sealed class CoomerApp
 
   public void Run()
   {
-    // Capturar ANTES de abrir a janela (senao o overlay entra na foto) e SO o monitor
-    // onde esta o cursor — assim janela e captura tem o mesmo tamanho/origem.
     _screenshot = Screenshot.CaptureMonitorUnderCursor();
 
+    // +1px na altura: cobrir o monitor exato dispara fullscreen-optimization
+    // do Windows e a tela pisca; sobrar 1px fora mantem janela composta.
     var options = WindowOptions.Default with
     {
-      // +1px de altura de proposito: se a janela cobre o monitor EXATO, o Windows
-      // engata "fullscreen optimization" e faz uma troca de modo (a tela pisca ao
-      // abrir/fechar). 1px a mais (que cai fora da tela) mantem ela como janela
-      // composta normal -> sem piscada.
       Size = new Vector2D<int>(_screenshot.Width, _screenshot.Height + 1),
       Position = new Vector2D<int>(_screenshot.OriginX, _screenshot.OriginY),
       Title = "coomer",
       WindowBorder = WindowBorder.Hidden,
       TopMost = true,
       VSync = true,
-      IsVisible = false, // comeca invisivel; mostramos so depois do 1o frame (sem piscada)
+      IsVisible = false,
     };
 
     _window = Window.Create(options);
@@ -87,9 +80,10 @@ public sealed class CoomerApp
     _flashlight = new Flashlight();
     _picker = new ColorPicker();
     _draw = new DrawTool();
+    _exporter = new RegionExporter();
     _renderer = new Renderer(_gl, _screenshot);
     _handler = new InputHandler(_input, _camera, _flashlight, _config, _screenshot,
-                                _configPath, _frameRate, _picker, _draw);
+                                _configPath, _frameRate, _picker, _draw, _exporter);
 
     if (_window.Native?.Win32 is { } win32)
       _hwnd = win32.Hwnd;
@@ -99,15 +93,13 @@ public sealed class CoomerApp
 
   private void OnUpdate(double delta)
   {
-    // dt fixo amarrado ao refresh (mesmo feeling do boomer original).
     float dt = 1f / _frameRate;
-    // Usa o tamanho REAL da tela (nao o framebuffer, que tem +1px) pra projecao casar
-    // pixel a pixel com o desktop e nao deslocar a imagem.
     var windowSize = new Vector2(_screenshot.Width, _screenshot.Height);
 
-    _handler.Tick(); // sincroniza estado do cursor (hide/show com flashlight)
+    _handler.Tick();
     _camera.Update(_config, dt, _handler.Dragging, windowSize);
     _flashlight.Update(_config, dt, _handler.CursorPosition);
+    _exporter.TickStatus(dt);
 
     if (_handler.Quitting)
       _window.Close();
@@ -115,8 +107,6 @@ public sealed class CoomerApp
 
   private void OnRender(double delta)
   {
-    // Mostra a janela so a partir do 2o frame: o 1o ja foi desenhado e apresentado,
-    // entao ela aparece direto com a captura (sem o flash do fundo vazio).
     if (_frames == 1 && !_shown)
     {
       _window.IsVisible = true;
@@ -126,7 +116,12 @@ public sealed class CoomerApp
 
     var windowSize = new Vector2(_screenshot.Width, _screenshot.Height);
     _renderer.Draw(_camera, _flashlight, _config, _handler.Mirror, windowSize,
-                   _handler.CursorPosition, _draw);
+                   _handler.CursorPosition, _draw, _picker.History, _exporter);
+
+    // Depois do Draw e antes do swap: framebuffer ja tem o composite final.
+    int yOff = _window.FramebufferSize.Y - _screenshot.Height;
+    _exporter.FlushAfterRender(_gl, yOff, _screenshot.Width, _screenshot.Height);
+
     _frames++;
   }
 
@@ -135,16 +130,12 @@ public sealed class CoomerApp
     ApplyViewport();
   }
 
-  // Renderiza so na area visivel do monitor. O +1px extra do framebuffer cai embaixo
-  // (fora da tela), entao deslocamos o viewport em Y pra imagem cobrir a tela exata.
   private void ApplyViewport()
   {
     int yOff = _window.FramebufferSize.Y - _screenshot.Height;
     _gl.Viewport(0, yOff, (uint)_screenshot.Width, (uint)_screenshot.Height);
   }
 
-  // Libera o input e os recursos de GL ao fechar o overlay. Sem isso, ao reabrir,
-  // o GLFW reusa o handle da janela e o Silk crasha com "More than one input context".
   private void OnClosing()
   {
     _handler?.RestoreCursor();

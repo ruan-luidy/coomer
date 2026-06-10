@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 using Silk.NET.OpenGL;
 using Coomer.Features.Capture;
 using Coomer.Features.Configuration;
@@ -8,12 +8,6 @@ using Coomer.Features.Drawing;
 
 namespace Coomer.Features.Rendering;
 
-/// <summary>
-/// Porte do setup de buffers/textura e do <c>draw</c> de boomer.nim.
-/// Desenha um unico quad texturizado com a screenshot; todo o zoom/lanterna/mirror
-/// acontece nos shaders. Em seguida o <see cref="StrokeRenderer"/> joga os tracos
-/// do <see cref="DrawTool"/> por cima.
-/// </summary>
 public sealed unsafe class Renderer : IDisposable
 {
   private readonly GL _gl;
@@ -43,11 +37,10 @@ public sealed unsafe class Renderer : IDisposable
     float h = _imageHeight;
     Span<float> vertices = stackalloc float[]
     {
-            //  x    y     u     v
-                w,   0f,   1f,   1f, // top right
-                w,   h,    1f,   0f, // bottom right
-                0f,  h,    0f,   0f, // bottom left
-                0f,  0f,   0f,   1f, // top left
+                w,   0f,   1f,   1f,
+                w,   h,    1f,   0f,
+                0f,  h,    0f,   0f,
+                0f,  0f,   0f,   1f,
         };
     Span<uint> indices = stackalloc uint[] { 0, 1, 3, 1, 2, 3 };
 
@@ -80,7 +73,6 @@ public sealed unsafe class Renderer : IDisposable
     }
     gl.GenerateMipmap(TextureTarget.Texture2D);
 
-    // Linear suaviza o print ao dar zoom (Nearest deixa quadriculado/pixelado).
     gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)GLEnum.Linear);
     gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)GLEnum.Linear);
     gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)GLEnum.ClampToBorder);
@@ -93,7 +85,8 @@ public sealed unsafe class Renderer : IDisposable
   }
 
   public void Draw(Camera camera, Flashlight flashlight, Config config,
-                   bool mirror, Vector2 windowSize, Vector2 cursor, DrawTool drawTool)
+                   bool mirror, Vector2 windowSize, Vector2 cursor,
+                   DrawTool drawTool, ColorHistory? history, RegionExporter? exporter)
   {
     _gl.ClearColor(0.1f, 0.1f, 0.1f, 1.0f);
     _gl.Clear((uint)(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit));
@@ -109,8 +102,6 @@ public sealed unsafe class Renderer : IDisposable
     _shader.SetInt("mirror", mirror ? 1 : 0);
 
     _shader.SetVec2("bubblePos", flashlight.Position);
-    // Stretch vive em coords de janela (Y pra baixo); o shader mede em gl_FragCoord
-    // (Y pra cima). Sem inverter o Y aqui a bolha balanca numa direcao espelhada.
     _shader.SetVec2("bubbleStretch", new Vector2(flashlight.Stretch.X, -flashlight.Stretch.Y));
     _shader.SetFloat("bubbleSqueeze", flashlight.Squeeze);
     _shader.SetInt("flEnabled", flashlight.IsEnabled ? 1 : 0);
@@ -128,10 +119,7 @@ public sealed unsafe class Renderer : IDisposable
     _gl.BindVertexArray(_vao);
     _gl.DrawElements(PrimitiveType.Triangles, 6, DrawElementsType.UnsignedInt, (void*)0);
 
-    // Tracos por cima de tudo (inclusive da sombra da lanterna) — pra ficarem
-    // visiveis mesmo no modo flashlight. Tambem desenha o ringue do brush no
-    // cursor pra o usuario ver o tamanho do pincel.
-    _strokes.Draw(drawTool, camera, mirror, windowSize, _screenshot, cursor);
+    _strokes.Draw(drawTool, camera, mirror, windowSize, _screenshot, cursor, history, exporter);
   }
 
   public void Dispose()

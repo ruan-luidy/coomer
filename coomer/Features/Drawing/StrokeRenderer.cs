@@ -2,36 +2,27 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using Silk.NET.OpenGL;
 using Coomer.Features.Capture;
+using Coomer.Features.Lighting;
 using Coomer.Features.Navigation;
 using Coomer.Features.Rendering;
 using Shader = Coomer.Features.Rendering.Shader;
 
 namespace Coomer.Features.Drawing;
 
-/// <summary>
-/// Renderiza os tracos do <see cref="DrawTool"/> por cima da screenshot. Cada
-/// segmento vira um quad expandido em halfWidth+pad de AA, e o fragment shader
-/// faz anti-alias por distance-field (distancia ao segmento + fwidth) — entrega
-/// borda lisa, round caps de graca e juncoes invisiveis entre segmentos
-/// consecutivos. Apos os tracos, desenha o ringue indicador do tamanho do brush
-/// na posicao do cursor.
-/// </summary>
+// AA por distance-field (distSeg + fwidth). Image-space pros tracos/stamps,
+// screen-space pro ringue do brush, swatches e rect de region.
 public sealed unsafe class StrokeRenderer : IDisposable
 {
-  // 2 (pos) + 2 (segA) + 2 (segB) + 1 (halfWidth)
+  // pos.xy, segA.xy, segB.xy, halfWidth
   private const int FloatsPerVertex = 7;
   private const int Stride = FloatsPerVertex * sizeof(float);
-
-  // Pad de AA: o quad precisa ser maior que o segmento por halfWidth + alguns
-  // pixels pra a banda do smoothstep caber dentro. 2 imagem-units sobra
-  // bastante em qualquer zoom razoavel (MinScale=1 entao fwidth<=1).
   private const float AaPad = 2f;
 
   private readonly GL _gl;
   private readonly Shader _shader;
   private readonly uint _vao;
   private readonly uint _vbo;
-  private uint _capacity; // tamanho atual (em floats) do buffer
+  private uint _capacity;
   private readonly List<float> _verts = new();
 
   public StrokeRenderer(GL gl)
@@ -64,12 +55,17 @@ public sealed unsafe class StrokeRenderer : IDisposable
     gl.EnableVertexAttribArray(3);
   }
 
-  public void Draw(DrawTool tool, Camera camera, bool mirror,
-                   Vector2 windowSize, Screenshot shot, Vector2 cursorScreen)
+  public void Draw(DrawTool tool, Camera camera, bool mirror, Vector2 windowSize,
+                   Screenshot shot, Vector2 cursorScreen,
+                   ColorHistory? history, RegionExporter? exporter)
   {
-    bool hasStrokes = tool.Strokes.Count > 0;
-    bool wantsRing = tool.IsEnabled;
-    if (!hasStrokes && !wantsRing) return;
+    bool wantsBrushRing = tool.IsEnabled && !tool.StampMode;
+    bool wantsStamps = !tool.Hide && tool.Stamps.Count > 0;
+    bool wantsStrokes = !tool.Hide && tool.Strokes.Count > 0;
+    bool wantsHistory = history != null && history.Entries.Count > 0;
+    bool wantsRegionRect = exporter != null && exporter.Dragging;
+    if (!wantsBrushRing && !wantsStamps && !wantsStrokes && !wantsHistory && !wantsRegionRect)
+      return;
 
     var screenshotSize = new Vector2(shot.Width, shot.Height);
 
@@ -85,29 +81,87 @@ public sealed unsafe class StrokeRenderer : IDisposable
     _gl.Enable(EnableCap.Blend);
     _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
 
-    foreach (var s in tool.Strokes)
+    _shader.SetInt("uScreenSpace", 0);
+    if (wantsStrokes)
     {
-      _verts.Clear();
-      BuildStroke(s, _verts);
-      if (_verts.Count == 0) continue;
-      UploadAndDraw(_verts, s.Color);
+      foreach (var s in tool.Strokes)
+      {
+        _verts.Clear();
+        BuildStroke(s, _verts);
+        if (_verts.Count > 0) UploadAndDraw(_verts, s.Color);
+      }
+    }
+    if (wantsStamps)
+    {
+      foreach (var s in tool.Stamps)
+      {
+        _verts.Clear();
+        EmitSeg(s.Center, s.Center, s.Radius, _verts);
+        UploadAndDraw(_verts, s.Color);
+
+        _verts.Clear();
+        EmitNumber(s.Center, s.Radius, s.Number, _verts);
+        if (_verts.Count > 0) UploadAndDraw(_verts, Contrasting(s.Color));
+      }
     }
 
-    if (wantsRing)
+    _shader.SetInt("uScreenSpace", 1);
+    if (wantsBrushRing)
     {
       _verts.Clear();
-      var cursorImg = ScreenToImage(cursorScreen, windowSize, shot, camera, mirror);
-      BuildBrushRing(cursorImg, tool.Thickness * 0.5f, camera.Scale, _verts);
+      // Ringue em screen-space pra espessura constante. raio_tela = raio_imagem * scale.
+      float ringRadius = tool.Thickness * 0.5f * camera.Scale;
+      BuildRing(cursorScreen, ringRadius, 0.8f, _verts);
       if (_verts.Count > 0)
       {
-        // ringue na cor do brush mas semi-translucido — fica visivel sem
-        // sobrepujar o conteudo embaixo
         var c = tool.CurrentColor;
         UploadAndDraw(_verts, new Vector4(c.X, c.Y, c.Z, 0.75f));
       }
     }
 
+    if (wantsHistory)
+    {
+      DrawColorSwatches(history!, windowSize);
+    }
+
+    if (wantsRegionRect && exporter != null)
+    {
+      _verts.Clear();
+      BuildRectOutline(exporter.Start, exporter.End, 1.5f, _verts);
+      if (_verts.Count > 0)
+        UploadAndDraw(_verts, new Vector4(0.2f, 0.8f, 1f, 1f));
+    }
+
+    _shader.SetInt("uScreenSpace", 0);
     _gl.Disable(EnableCap.Blend);
+  }
+
+  private void DrawColorSwatches(ColorHistory history, Vector2 windowSize)
+  {
+    const float sw = 24f;
+    const float gap = 6f;
+    const float pad = 16f;
+
+    int n = history.Entries.Count;
+    float totalW = n * sw + (n - 1) * gap;
+    float x0 = windowSize.X - pad - totalW;
+    float y0 = windowSize.Y - pad - sw;
+
+    int i = 0;
+    foreach (var c in history.Entries)
+    {
+      _verts.Clear();
+      float cx = x0 + i * (sw + gap) + sw * 0.5f;
+      float cy = y0 + sw * 0.5f;
+      EmitFilledSquare(cx, cy, sw * 0.5f, _verts);
+      UploadAndDraw(_verts, c);
+
+      _verts.Clear();
+      BuildRectOutline(new Vector2(cx - sw / 2, cy - sw / 2),
+                       new Vector2(cx + sw / 2, cy + sw / 2), 0.8f, _verts);
+      UploadAndDraw(_verts, new Vector4(0f, 0f, 0f, 0.6f));
+      i++;
+    }
   }
 
   private void UploadAndDraw(List<float> verts, Vector4 color)
@@ -134,16 +188,8 @@ public sealed unsafe class StrokeRenderer : IDisposable
     switch (s.Shape)
     {
       case DrawShape.Free:
-        if (s.Points.Count == 1)
-        {
-          EmitSeg(s.Points[0], s.Points[0], h, verts);
-          break;
-        }
-        if (s.Points.Count == 2)
-        {
-          EmitSeg(s.Points[0], s.Points[1], h, verts);
-          break;
-        }
+        if (s.Points.Count == 1) { EmitSeg(s.Points[0], s.Points[0], h, verts); break; }
+        if (s.Points.Count == 2) { EmitSeg(s.Points[0], s.Points[1], h, verts); break; }
         EmitSmoothFree(s.Points, h, verts);
         break;
 
@@ -153,8 +199,9 @@ public sealed unsafe class StrokeRenderer : IDisposable
         break;
 
       case DrawShape.Arrow:
-        if (s.Points.Count >= 2)
-          EmitArrow(s.Points[0], s.Points[1], h, s.Thickness, verts);
+        if (s.Points.Count == 1) { EmitSeg(s.Points[0], s.Points[0], h, verts); break; }
+        if (s.Points.Count == 2) { EmitArrow(s.Points[0], s.Points[1], h, s.Thickness, verts); break; }
+        EmitFreehandArrow(s.Points, h, s.Thickness, verts);
         break;
 
       case DrawShape.Rect:
@@ -174,76 +221,73 @@ public sealed unsafe class StrokeRenderer : IDisposable
         break;
 
       case DrawShape.Circle:
-        if (s.Points.Count >= 2)
+        // 3 pontos = elipse via PCA. 2 pontos = bbox -> elipse axis-aligned.
+        if (s.Points.Count >= 3)
         {
           var center = s.Points[0];
-          float radius = (s.Points[1] - center).Length();
-          EmitCircle(center, radius, h, verts);
+          var axA = s.Points[1] - center;
+          var axB = s.Points[2] - center;
+          EmitEllipse(center, axA, axB, h, verts);
+        }
+        else if (s.Points.Count >= 2)
+        {
+          var a = s.Points[0];
+          var b = s.Points[1];
+          var center = (a + b) * 0.5f;
+          var axA = new Vector2((b.X - a.X) * 0.5f, 0f);
+          var axB = new Vector2(0f, (b.Y - a.Y) * 0.5f);
+          EmitEllipse(center, axA, axB, h, verts);
         }
         break;
     }
   }
 
-  // Seta = shaft (a->b) + dois segmentos da cabeca saindo de b voltando ao longo
-  // de -dir, rotacionados +/- theta. Comprimento da cabeca: proporcional ao
-  // shaft mas com piso/teto pra parecer setinha mesmo em arrasto curto/longo.
-  private static void EmitArrow(Vector2 a, Vector2 b, float h, float thickness, List<float> v)
+  private static void EmitFreehandArrow(List<Vector2> pts, float h, float thickness, List<float> v)
   {
-    var d = b - a;
-    float len = d.Length();
-    if (len < 1f)
+    EmitSmoothFree(pts, h, v);
+
+    var end = pts[^1];
+    Vector2 from = pts[0];
+    float minDist = MathF.Max(20f, thickness * 4f);
+    for (int i = pts.Count - 2; i >= 0; i--)
     {
-      EmitSeg(a, b, h, v);
-      return;
+      if ((end - pts[i]).Length() >= minDist) { from = pts[i]; break; }
+      from = pts[i];
     }
+    var d = end - from;
+    float len = d.Length();
+    if (len < 1f) return;
     var dir = d / len;
-    EmitSeg(a, b, h, v); // shaft
 
-    // Cabeca: 30% do shaft, com piso 6*thickness (pra seta curta ainda mostrar
-    // ponta) e teto 50% do shaft. Em seta curtinha + brush gigante o piso pode
-    // ultrapassar o teto — clampa o piso ao teto antes, senao Math.Clamp
-    // estoura com ArgumentException no left-drag e a app trava.
-    float maxHead = len * 0.50f;
-    float floor = MathF.Min(thickness * 6f, maxHead);
-    float headLen = Math.Clamp(len * 0.30f, floor, maxHead);
-    const float theta = 0.5f; // ~28.6 graus de abertura
+    float headLen = MathF.Max(thickness * 6f, 18f);
+    const float theta = 0.5f;
     float cs = MathF.Cos(theta), sn = MathF.Sin(theta);
-
     var backDir = -dir;
-    var leftDir = new Vector2(
-      backDir.X * cs - backDir.Y * sn,
-      backDir.X * sn + backDir.Y * cs);
-    var rightDir = new Vector2(
-      backDir.X * cs + backDir.Y * sn,
-      -backDir.X * sn + backDir.Y * cs);
-
-    EmitSeg(b, b + leftDir * headLen, h, v);
-    EmitSeg(b, b + rightDir * headLen, h, v);
+    var leftDir = new Vector2(backDir.X * cs - backDir.Y * sn, backDir.X * sn + backDir.Y * cs);
+    var rightDir = new Vector2(backDir.X * cs + backDir.Y * sn, -backDir.X * sn + backDir.Y * cs);
+    EmitSeg(end, end + leftDir * headLen, h, v);
+    EmitSeg(end, end + rightDir * headLen, h, v);
   }
 
-  // Circulo do shape Circle: poligono regular com N segmentos. N cresce com o
-  // raio pra nao virar octogono em circulo grande. Cada segmento tem espessura
-  // h (igual aos outros shapes).
-  private static void EmitCircle(Vector2 center, float radius, float h, List<float> v)
+  // p(theta) = center + cos(theta)*axA + sin(theta)*axB
+  private static void EmitEllipse(Vector2 center, Vector2 axA, Vector2 axB, float h, List<float> v)
   {
-    if (radius < 1f) return;
-    int n = Math.Clamp(32 + (int)(radius * 0.4f), 40, 128);
+    float majorMag = axA.Length();
+    float minorMag = axB.Length();
+    if (majorMag < 1f && minorMag < 1f) return;
+    float maxR = MathF.Max(majorMag, minorMag);
+    int n = Math.Clamp(40 + (int)(maxR * 0.4f), 48, 160);
     float dPhi = MathF.PI * 2f / n;
-    var prev = center + new Vector2(radius, 0f);
+    var prev = center + axA; // theta = 0
     for (int i = 1; i <= n; i++)
     {
       float ang = i * dPhi;
-      var cur = center + new Vector2(MathF.Cos(ang), MathF.Sin(ang)) * radius;
+      var cur = center + axA * MathF.Cos(ang) + axB * MathF.Sin(ang);
       EmitSeg(prev, cur, h, v);
       prev = cur;
     }
   }
 
-  // Traco livre suave: passa uma spline Catmull-Rom pelos pontos amostrados do
-  // mouse em vez de ligar com retas. Cada span P1->P2 usa P0 e P3 como tangentes
-  // (pontas clampadas pra ela mesma), e e subdividido por comprimento pra manter
-  // a curvatura lisa sem tesselar demais em tracos longos. Custo zero de lag: a
-  // suavidade e puramente geometrica, nao adia o tempo do tracado.
   private static void EmitSmoothFree(List<Vector2> pts, float h, List<float> v)
   {
     int count = pts.Count;
@@ -253,10 +297,8 @@ public sealed unsafe class StrokeRenderer : IDisposable
       var p1 = pts[i];
       var p2 = pts[i + 1];
       var p3 = pts[i + 2 >= count ? count - 1 : i + 2];
-
       float segLen = (p2 - p1).Length();
       int sub = Math.Clamp((int)(segLen / 3f), 1, 24);
-
       var prev = p1;
       for (int k = 1; k <= sub; k++)
       {
@@ -268,8 +310,6 @@ public sealed unsafe class StrokeRenderer : IDisposable
     }
   }
 
-  // Catmull-Rom uniforme (tensao 0.5): a curva passa por p1 e p2 com tangentes
-  // dadas pelos vizinhos. t em [0,1] no span p1->p2.
   private static Vector2 CatmullRom(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, float t)
   {
     float t2 = t * t;
@@ -281,9 +321,125 @@ public sealed unsafe class StrokeRenderer : IDisposable
       + (3f * p1 - 3f * p2 + p3 - p0) * t3);
   }
 
-  // Constroi um quad cobrindo a area de influencia do segmento (halfWidth + pad
-  // de AA). O fragment shader que decide alpha por distance-to-segment, dando
-  // round caps automaticos nas pontas (distSeg clampa t em [0,1]).
+  private static void EmitArrow(Vector2 a, Vector2 b, float h, float thickness, List<float> v)
+  {
+    var d = b - a;
+    float len = d.Length();
+    if (len < 1f) { EmitSeg(a, b, h, v); return; }
+    var dir = d / len;
+    EmitSeg(a, b, h, v);
+
+    float maxHead = len * 0.50f;
+    float floor = MathF.Min(thickness * 6f, maxHead);
+    float headLen = Math.Clamp(len * 0.30f, floor, maxHead);
+    const float theta = 0.5f;
+    float cs = MathF.Cos(theta), sn = MathF.Sin(theta);
+    var backDir = -dir;
+    var leftDir = new Vector2(backDir.X * cs - backDir.Y * sn, backDir.X * sn + backDir.Y * cs);
+    var rightDir = new Vector2(backDir.X * cs + backDir.Y * sn, -backDir.X * sn + backDir.Y * cs);
+    EmitSeg(b, b + leftDir * headLen, h, v);
+    EmitSeg(b, b + rightDir * headLen, h, v);
+  }
+
+  // Numero em 7-segment-display centrado no stamp. Suporta 1-99 (>99 vira "99").
+  private static void EmitNumber(Vector2 center, float stampRadius, int number, List<float> v)
+  {
+    int n = Math.Clamp(number, 0, 99);
+    string s = n.ToString();
+    float r = stampRadius;
+    float digW = r * 0.5f;
+    float digH = r * 0.7f;
+    float strokeH = MathF.Max(1.5f, r * 0.12f);
+    float gap = r * 0.15f;
+
+    float totalW = s.Length * digW + (s.Length - 1) * gap;
+    float startX = center.X - totalW * 0.5f + digW * 0.5f;
+    for (int i = 0; i < s.Length; i++)
+    {
+      int d = s[i] - '0';
+      float cx = startX + i * (digW + gap);
+      EmitDigit(new Vector2(cx, center.Y), digW, digH, strokeH, d, v);
+    }
+  }
+
+  private static void EmitDigit(Vector2 c, float w, float h, float sh, int d, List<float> v)
+  {
+    float hw = w * 0.5f;
+    float hh = h * 0.5f;
+    var tl = new Vector2(c.X - hw, c.Y - hh);
+    var tr = new Vector2(c.X + hw, c.Y - hh);
+    var ml = new Vector2(c.X - hw, c.Y);
+    var mr = new Vector2(c.X + hw, c.Y);
+    var bl = new Vector2(c.X - hw, c.Y + hh);
+    var br = new Vector2(c.X + hw, c.Y + hh);
+
+    bool a, b, cc, dd, e, f, g;
+    switch (d)
+    {
+      case 0: a = b = cc = dd = e = f = true; g = false; break;
+      case 1: a = dd = e = f = g = false; b = cc = true; break;
+      case 2: a = b = g = e = dd = true; cc = f = false; break;
+      case 3: a = b = g = cc = dd = true; e = f = false; break;
+      case 4: f = g = b = cc = true; a = dd = e = false; break;
+      case 5: a = f = g = cc = dd = true; b = e = false; break;
+      case 6: a = f = g = cc = dd = e = true; b = false; break;
+      case 7: a = b = cc = true; dd = e = f = g = false; break;
+      case 8: a = b = cc = dd = e = f = g = true; break;
+      case 9: a = b = cc = dd = f = g = true; e = false; break;
+      default: return;
+    }
+
+    if (a) EmitSeg(tl, tr, sh, v);
+    if (b) EmitSeg(tr, mr, sh, v);
+    if (cc) EmitSeg(mr, br, sh, v);
+    if (dd) EmitSeg(bl, br, sh, v);
+    if (e) EmitSeg(ml, bl, sh, v);
+    if (f) EmitSeg(tl, ml, sh, v);
+    if (g) EmitSeg(ml, mr, sh, v);
+  }
+
+  private static Vector4 Contrasting(Vector4 c)
+  {
+    float l = 0.299f * c.X + 0.587f * c.Y + 0.114f * c.Z;
+    return l > 0.55f ? new Vector4(0f, 0f, 0f, 1f) : new Vector4(1f, 1f, 1f, 1f);
+  }
+
+  private static void BuildRing(Vector2 center, float radius, float strokeHalf, List<float> v)
+  {
+    if (radius < 0.5f) return;
+    int n = Math.Clamp(16 + (int)(radius * 0.6f), 24, 96);
+    float dPhi = MathF.PI * 2f / n;
+    var prev = center + new Vector2(radius, 0f);
+    for (int i = 1; i <= n; i++)
+    {
+      float ang = i * dPhi;
+      var cur = center + new Vector2(MathF.Cos(ang), MathF.Sin(ang)) * radius;
+      EmitSeg(prev, cur, strokeHalf, v);
+      prev = cur;
+    }
+  }
+
+  private static void BuildRectOutline(Vector2 a, Vector2 b, float strokeHalf, List<float> v)
+  {
+    var tl = new Vector2(MathF.Min(a.X, b.X), MathF.Min(a.Y, b.Y));
+    var br = new Vector2(MathF.Max(a.X, b.X), MathF.Max(a.Y, b.Y));
+    var tr = new Vector2(br.X, tl.Y);
+    var bl = new Vector2(tl.X, br.Y);
+    EmitSeg(tl, tr, strokeHalf, v);
+    EmitSeg(tr, br, strokeHalf, v);
+    EmitSeg(br, bl, strokeHalf, v);
+    EmitSeg(bl, tl, strokeHalf, v);
+  }
+
+  // Segmento horizontal curto com halfWidth=halfSide vira "stadium" (cantos
+  // arredondados pelo distSeg) — visualmente um quadrado pro swatch.
+  private static void EmitFilledSquare(float cx, float cy, float halfSide, List<float> v)
+  {
+    var left = new Vector2(cx - halfSide * 0.5f, cy);
+    var right = new Vector2(cx + halfSide * 0.5f, cy);
+    EmitSeg(left, right, halfSide, v);
+  }
+
   private static void EmitSeg(Vector2 a, Vector2 b, float h, List<float> v)
   {
     var d = b - a;
@@ -291,8 +447,6 @@ public sealed unsafe class StrokeRenderer : IDisposable
     Vector2 dir, n;
     if (len < 1e-4f)
     {
-      // Ponto isolado: usa eixo cardinal pro quad. distSeg trata A==B como
-      // disco no ponto, entao da redondinho.
       dir = new Vector2(1f, 0f);
       n = new Vector2(0f, 1f);
     }
@@ -325,32 +479,6 @@ public sealed unsafe class StrokeRenderer : IDisposable
     v.Add(h);
   }
 
-  // Ringue mostrando o tamanho do brush no cursor. Stroke do ringue e fino
-  // (constante em pixels de TELA), independente do zoom — vira segmento de
-  // halfWidth = 1px-de-tela em image-units = 1/(2*scale). Conta de segmentos
-  // escala com a circunferencia pra nao virar poligono visivel.
-  private static void BuildBrushRing(Vector2 center, float radius, float scale, List<float> v)
-  {
-    if (radius < 0.1f) return;
-    float ringHalf = MathF.Max(0.25f / scale, 0.1f);
-    // 32 segmentos pra brush minusculo, ate ~96 pra brush gigante. Mantem ~3
-    // px-de-tela por segmento (assumindo scale=1; em zoom alto compensa pra
-    // mais segmentos via radius*scale).
-    int n = Math.Clamp(16 + (int)(radius * scale * 0.6f), 24, 96);
-
-    float dPhi = MathF.PI * 2f / n;
-    var prev = center + new Vector2(radius, 0f);
-    for (int i = 1; i <= n; i++)
-    {
-      float ang = i * dPhi;
-      var cur = center + new Vector2(MathF.Cos(ang), MathF.Sin(ang)) * radius;
-      EmitSeg(prev, cur, ringHalf, v);
-      prev = cur;
-    }
-  }
-
-  // Mesma conta do DrawTool.ScreenToImage: cursor de tela -> pixel canonico
-  // (sem mirror) da screenshot, pra centrar o ringue onde o usuario ta apontando.
   private static Vector2 ScreenToImage(Vector2 cursor, Vector2 windowSize,
                                        Screenshot shot, Camera camera, bool mirror)
   {

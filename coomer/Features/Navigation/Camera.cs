@@ -1,9 +1,8 @@
-﻿using System.Numerics;
+using System.Numerics;
 using Coomer.Features.Configuration;
 
 namespace Coomer.Features.Navigation;
 
-/// <summary>Estado do mouse usado pela navegacao (porte do <c>Mouse</c> de navigation.nim).</summary>
 public struct Mouse
 {
   public Vector2 Current;
@@ -21,8 +20,6 @@ public sealed class Camera
   public float DeltaScale;
   public Vector2 ScalePivot;
 
-  // Quando LerpingToTarget=true, Update() anima Position->TargetPosition e
-  // Scale->TargetScale a cada frame (em vez de dar snap como o Reset antigo).
   public Vector2 TargetPosition;
   public float TargetScale = 1.0f;
   public bool LerpingToTarget;
@@ -31,13 +28,11 @@ public sealed class Camera
 
   public Camera(Vector2 imageSize) => _imageSize = imageSize;
 
-  /// <summary>Converte um ponto de tela para coordenadas de "mundo" (dividindo pela escala).</summary>
   public Vector2 World(Vector2 v) => v / Scale;
 
   public void Update(Config config, float dt, bool dragging, Vector2 windowSize)
   {
-    // Roda ANTES do bloco de DeltaScale para que um zoom acidental nao quebre
-    // a animcao de recentrar; o lerp termina quando esta perto o suficiente.
+    // Antes do bloco de zoom: um delta de scale acidental nao deve quebrar o lerp.
     if (LerpingToTarget)
     {
       float t = MathF.Min(1.0f, dt * config.CameraRecenterLerpSpeed);
@@ -74,10 +69,6 @@ public sealed class Camera
     ClampToImage(windowSize);
   }
 
-  /// <summary>
-  /// Impede dar pan pra fora da imagem: limita a posicao para que a regiao visivel
-  /// (windowSize/Scale em pixels da imagem) nunca passe das bordas da screenshot.
-  /// </summary>
   private void ClampToImage(Vector2 windowSize)
   {
     var maxX = (_imageSize.X - windowSize.X / Scale) * 0.5f;
@@ -86,10 +77,9 @@ public sealed class Camera
     Position.Y = maxY > 0f ? Math.Clamp(Position.Y, -maxY, maxY) : 0f;
   }
 
-  /// <summary>Volta camera ao estado inicial (tecla 0). Se <paramref name="animar"/>, anima.</summary>
-  public void Reset(bool animar)
+  public void Reset(bool animate)
   {
-    if (animar)
+    if (animate)
     {
       TargetPosition = Vector2.Zero;
       TargetScale = 1.0f;
@@ -107,7 +97,6 @@ public sealed class Camera
     }
   }
 
-  /// <summary>Pan instantaneo (usado pelas teclas H/J/K/L e setas).</summary>
   public void Pan(Vector2 delta)
   {
     LerpingToTarget = false;

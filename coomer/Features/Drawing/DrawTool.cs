@@ -5,38 +5,31 @@ using Coomer.Features.Navigation;
 
 namespace Coomer.Features.Drawing;
 
-/// <summary>
-/// Estado do modo de desenho. Quando ativo, o left-drag deixa de panar e vira
-/// pincel/linha/seta/retangulo/circulo. Tracos sao guardados em coords de imagem
-/// (pixel da screenshot), com mirror "desfeito" no clique e refeito no shader
-/// — assim o desenho fica preso ao conteudo independente do estado do espelho.
-///
-/// No release de um traco livre (Free), tenta reconhecer um circulo desenhado
-/// a mao (a la iPhone Scribble): se a forma fechada parece circular o bastante,
-/// troca o traco por um Circle perfeito.
-/// </summary>
 public sealed class DrawTool
 {
-  // Paleta minima: bem saturada pra constrastar com a foto por baixo.
   private static readonly Vector4[] Pallet =
   {
-    new(1.00f, 0.20f, 0.20f, 1f), // vermelho
-    new(1.00f, 0.85f, 0.20f, 1f), // amarelo
-    new(0.25f, 1.00f, 0.40f, 1f), // verde
-    new(0.30f, 0.70f, 1.00f, 1f), // azul
-    new(1.00f, 0.40f, 1.00f, 1f), // magenta
-    new(1.00f, 1.00f, 1.00f, 1f), // branco
-    new(0.00f, 0.00f, 0.00f, 1f), // preto
+    new(1.00f, 0.20f, 0.20f, 1f),
+    new(1.00f, 0.85f, 0.20f, 1f),
+    new(0.25f, 1.00f, 0.40f, 1f),
+    new(0.30f, 0.70f, 1.00f, 1f),
+    new(1.00f, 0.40f, 1.00f, 1f),
+    new(1.00f, 1.00f, 1.00f, 1f),
+    new(0.00f, 0.00f, 0.00f, 1f),
   };
 
   public bool IsEnabled;
   public DrawShape Shape = DrawShape.Free;
   public int ColorIndex;
-  /// <summary>Espessura em pixels de imagem.</summary>
   public float Thickness = 4f;
-  /// <summary>Se ativado, traco livre que parece circulo vira circulo perfeito no release.</summary>
   public bool AutoCircle = true;
+  public bool Hide;
+  public bool StampMode;
+  public bool ShiftHeld;
+  public int NextStampNumber = 1;
+
   public readonly List<Stroke> Strokes = new();
+  public readonly List<Stamp> Stamps = new();
 
   private Stroke? _active;
   private readonly OneEuroFilterV2 _filter = new();
@@ -49,7 +42,6 @@ public sealed class DrawTool
   {
     _filter.Reset();
     _watch.Restart();
-    // Primeira amostra: passe direto (filtro inicializado nesse ponto sem lag).
     var smoothed = _filter.Step(cursorScreen, 1F / 120f);
     var p = ScreenToImage(smoothed, windowSize, shot, camera, mirror);
     _active = new Stroke()
@@ -74,16 +66,16 @@ public sealed class DrawTool
     var smoothed = _filter.Step(cursorScreen, dt);
     var p = ScreenToImage(smoothed, windowSize, shot, camera, mirror);
 
-    if (_active.Shape == DrawShape.Free)
+    if (_active.Shape is DrawShape.Free or DrawShape.Arrow)
     {
-      // Em coords de imagem 0.5px e nada � descarta pontos colados para nao inchar
-      // o buffer com microamostras do mouse de 1000Hz.
+      // Arrow agora eh tambem freehand: sampling = Free. Curva suave + cabeca
+      // no fim apontando pra direcao do tangente final (calculado no render).
       if (Vector2.DistanceSquared(_active.Points[^1], p) < 0.25f) return;
       _active.Points.Add(p);
     }
     else
     {
-      // Linha/seta/retangulo/circulo: so 2 pontos (inicio + arrasto atual).
+      if (ShiftHeld) p = ApplyShiftConstraint(_active.Shape, _active.Points[0], p);
       if (_active.Points.Count < 2) _active.Points.Add(p);
       else _active.Points[1] = p;
     }
@@ -94,28 +86,66 @@ public sealed class DrawTool
     if (_active != null
         && _active.Shape == DrawShape.Free
         && AutoCircle
-        && TryDetectCircle(_active.Points, out var c, out var r))
+        && TryDetectEllipse(_active.Points, out var c, out var axA, out var axB))
     {
-      // Efeito "Scribble" do iPhone: se o que voce desenhou ja era pra ser um
-      // circulo, vira um circulo bonito.
+      // Generalizacao do iPhone Scribble: detecta circulo OU elipse via PCA
+      // dos pontos. axA = eixo maior * comprimento; axB = eixo menor (perp)
+      // * comprimento. Funciona pra qualquer orientacao da elipse.
       _active.Shape = DrawShape.Circle;
       _active.Points.Clear();
       _active.Points.Add(c);
-      _active.Points.Add(c + new Vector2(r, 0f)); // ponto na borda
+      _active.Points.Add(c + axA);
+      _active.Points.Add(c + axB);
     }
     _active = null;
   }
 
+  /// <summary>Solta um stamp numerado no cursor (em modo StampMode).</summary>
+  public void DropStamp(Vector2 cursorScreen, Vector2 windowSize, Screenshot shot,
+                        Camera camera, bool mirror)
+  {
+    var p = ScreenToImage(cursorScreen, windowSize, shot, camera, mirror);
+    Stamps.Add(new Stamp
+    {
+      Center = p,
+      Number = NextStampNumber++,
+      Color = CurrentColor,
+      // Raio em pixel de imagem: cresce com thickness pra ficar visivel mesmo
+      // com brush fino. ~5x a meia-espessura da uma bolinha bem proporcional.
+      Radius = MathF.Max(12f, Thickness * 2.5f),
+    });
+  }
+
   public void Undo()
   {
-    if (Strokes.Count == 0) return;
-    Strokes.RemoveAt(Strokes.Count - 1);
-    _active = null;
+    // desfaz a coisa mais recente: se o ultimo stamp e mais novo que o ultimo
+    // traco, desfaz stamp; senao desfaz traco. Como nao temos timestamp,
+    // priorizamos remover de quem foi adicionado por ultimo — heuristica:
+    // se ha stamp e stampMode, desfaz stamp; senao traco. Pratico o bastante.
+    if (StampMode && Stamps.Count > 0)
+    {
+      Stamps.RemoveAt(Stamps.Count - 1);
+      if (NextStampNumber > 1) NextStampNumber--;
+      return;
+    }
+    if (Strokes.Count > 0)
+    {
+      Strokes.RemoveAt(Strokes.Count - 1);
+      _active = null;
+      return;
+    }
+    if (Stamps.Count > 0)
+    {
+      Stamps.RemoveAt(Stamps.Count - 1);
+      if (NextStampNumber > 1) NextStampNumber--;
+    }
   }
 
   public void Clear()
   {
     Strokes.Clear();
+    Stamps.Clear();
+    NextStampNumber = 1;
     _active = null;
   }
 
@@ -136,56 +166,89 @@ public sealed class DrawTool
   public void ThicknessDelta(float d)
     => Thickness = Math.Clamp(Thickness + d, 1f, 80f);
 
-  // Heuristica de reconhecimento de circulo (auto-correcao do traco livre).
-  // Criterios em ordem (qualquer falha => nao e circulo):
-  //   1. >=16 pontos amostrados
-  //   2. Raio medio >= 12 px (nao vira "circulo" qualquer tap/jitter)
-  //   3. stdDev(raio)/media <= 0.22 (todos os pontos a distancia parecida do centro)
-  //   4. Quase fechado: dist(p0, pN) < 0.6 * raio medio
-  //   5. Volta cumulativa >= ~306 graus (evita "C aberto")
-  // Centro = centroide; raio = distancia media ao centroide.
-  private static bool TryDetectCircle(List<Vector2> pts, out Vector2 center, out float radius)
+  // Snap pra Line em 45°; pra Rect e Circle, bbox quadrado (= retangulo quadrado
+  // ou circulo perfeito). Arrow agora eh freehand, nao tem 2-point pra snapar.
+  private static Vector2 ApplyShiftConstraint(DrawShape shape, Vector2 start, Vector2 end)
   {
-    center = default;
-    radius = 0f;
-    if (pts.Count < 16) return false;
+    var d = end - start;
+    if (shape is DrawShape.Line)
+    {
+      float ang = MathF.Atan2(d.Y, d.X);
+      float step = MathF.PI / 4f;
+      float snap = MathF.Round(ang / step) * step;
+      float len = d.Length();
+      return start + new Vector2(MathF.Cos(snap), MathF.Sin(snap)) * len;
+    }
+    if (shape is DrawShape.Rect or DrawShape.Circle)
+    {
+      float side = MathF.Max(MathF.Abs(d.X), MathF.Abs(d.Y));
+      float sx = d.X >= 0f ? 1f : -1f;
+      float sy = d.Y >= 0f ? 1f : -1f;
+      return start + new Vector2(sx * side, sy * side);
+    }
+    return end;
+  }
+
+  // Fit de elipse pelos autovetores da covariancia (a, b = sqrt(2 lambda_i)
+  // pra amostra uniforme). Aceita pelo RMS algebrico (x'/a)^2 + (y'/b)^2 - 1
+  // e pela varredura angular na parametrizacao excentrica.
+  private static bool TryDetectEllipse(List<Vector2> pts, out Vector2 center,
+                                       out Vector2 axA, out Vector2 axB)
+  {
+    center = default; axA = default; axB = default;
+    int n = pts.Count;
+    if (n < 16) return false;
 
     Vector2 c = Vector2.Zero;
     foreach (var p in pts) c += p;
-    c /= pts.Count;
+    c /= n;
 
-    float sumR = 0f, sumR2 = 0f;
+    float mxx = 0f, myy = 0f, mxy = 0f;
     foreach (var p in pts)
     {
-      float r = (p - c).Length();
-      sumR += r;
-      sumR2 += r * r;
+      var d = p - c;
+      mxx += d.X * d.X; myy += d.Y * d.Y; mxy += d.X * d.Y;
     }
-    float meanR = sumR / pts.Count;
-    if (meanR < 12f) return false;
+    mxx /= n; myy /= n; mxy /= n;
 
-    float varR = sumR2 / pts.Count - meanR * meanR;
-    float stdR = MathF.Sqrt(MathF.Max(0f, varR));
-    if (stdR / meanR > 0.22f) return false;
+    float halfT = (mxx + myy) * 0.5f;
+    float disc = MathF.Sqrt(MathF.Max(0f, halfT * halfT - (mxx * myy - mxy * mxy)));
+    float l1 = halfT + disc, l2 = MathF.Max(0f, halfT - disc);
+    if (l1 < 1e-6f) return false;
 
-    float closeDist = (pts[0] - pts[^1]).Length();
-    if (closeDist > meanR * 0.6f) return false;
+    Vector2 u = MathF.Abs(mxy) < 1e-4f
+      ? (mxx >= myy ? new Vector2(1f, 0f) : new Vector2(0f, 1f))
+      : Vector2.Normalize(new Vector2(mxy, l1 - mxx));
+    var v = new Vector2(-u.Y, u.X);
 
-    float totalAngle = 0f;
-    float prevA = MathF.Atan2(pts[0].Y - c.Y, pts[0].X - c.X);
-    for (int i = 1; i < pts.Count; i++)
+    float a = MathF.Sqrt(2f * l1);
+    float b = MathF.Sqrt(2f * l2);
+    if (a < 12f || b < 4f || a > 8f * b) return false;
+
+    float rss = 0f, sweep = 0f, prev = 0f;
+    for (int i = 0; i < n; i++)
     {
-      float a = MathF.Atan2(pts[i].Y - c.Y, pts[i].X - c.X);
-      float diff = a - prevA;
-      if (diff > MathF.PI) diff -= 2f * MathF.PI;
-      if (diff < -MathF.PI) diff += 2f * MathF.PI;
-      totalAngle += diff;
-      prevA = a;
+      var d = pts[i] - c;
+      float x = (d.X * u.X + d.Y * u.Y) / a;
+      float y = (d.X * v.X + d.Y * v.Y) / b;
+      float r = x * x + y * y - 1f;
+      rss += r * r;
+      float ang = MathF.Atan2(y, x);
+      if (i > 0)
+      {
+        float diff = ang - prev;
+        if (diff > MathF.PI) diff -= MathF.Tau;
+        else if (diff < -MathF.PI) diff += MathF.Tau;
+        sweep += diff;
+      }
+      prev = ang;
     }
-    if (MathF.Abs(totalAngle) < MathF.PI * 1.7f) return false; // < ~306 graus
+    if (MathF.Sqrt(rss / n) > 0.35f) return false;
+    if (MathF.Abs(sweep) < MathF.PI * 1.5f) return false;
 
     center = c;
-    radius = meanR;
+    axA = u * a;
+    axB = v * b;
     return true;
   }
 

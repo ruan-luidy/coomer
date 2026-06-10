@@ -14,9 +14,11 @@ uniform float cameraScale;
 uniform vec2 windowSize;
 uniform vec2 screenshotSize;
 uniform bool mirror;
+// True = aPos/aSegA/aSegB vem em pixels de TELA (UI overlay: ringue, swatches,
+// rect de region copy, etc). Pula o transform de camera/imagem e mapeia direto
+// pro clip. False = pixel de imagem (comportamento padrao dos tracos).
+uniform bool uScreenSpace;
 
-// Mesma conta do vert.glsl da screenshot — mantem o desenho perfeitamente
-// alinhado com a imagem em qualquer zoom/pan.
 vec2 to_world(vec2 v) {
     vec2 ratio = vec2(
         windowSize.x / screenshotSize.x / cameraScale,
@@ -27,16 +29,21 @@ vec2 to_world(vec2 v) {
 
 void main()
 {
-    // aPos vem em coord canonica (sem mirror) Y-down (Y=0 topo da foto). Pro
-    // posicionamento no clip, refazemos o mirror e o flip pra Y-up (o screenshot
-    // quad faz isso indiretamente via textura BGRA top-down).
-    vec2 p = aPos;
-    if (mirror) p.x = screenshotSize.x - p.x;
-    p.y = screenshotSize.y - p.y;
-    gl_Position = vec4(to_world(p - cameraPos * vec2(1.0, -1.0)), 0.0, 1.0);
+    if (uScreenSpace) {
+        // Mapeia screen pixel (Y-down) pra clip space (Y-up).
+        gl_Position = vec4(aPos.x / windowSize.x * 2.0 - 1.0,
+                           1.0 - aPos.y / windowSize.y * 2.0,
+                           0.0, 1.0);
+    } else {
+        vec2 p = aPos;
+        if (mirror) p.x = screenshotSize.x - p.x;
+        p.y = screenshotSize.y - p.y;
+        gl_Position = vec4(to_world(p - cameraPos * vec2(1.0, -1.0)), 0.0, 1.0);
+    }
 
-    // Pro AA, a frag mede distancia em coord canonica nao-flipada — entao
-    // passamos os 3 sem mexer. fwidth(distSeg) cuida da escala/zoom.
+    // Pro AA do frag, vPosImg/vA/vB vivem no MESMO espaco do aPos. Em screen
+    // mode sao screen pixels; em image mode sao image pixels. fwidth se vira
+    // em ambos.
     vPosImg = aPos;
     vA = aSegA;
     vB = aSegB;

@@ -4,10 +4,6 @@ using Silk.NET.OpenGL;
 
 namespace Coomer.Features.Rendering;
 
-/// <summary>
-/// Porte de <c>newShader</c>/<c>newShaderProgram</c> de boomer.nim.
-/// Compila + linka um programa GLSL e expoe helpers de uniform.
-/// </summary>
 public sealed class Shader : IDisposable
 {
   private readonly GL _gl;
@@ -24,7 +20,7 @@ public sealed class Shader : IDisposable
     gl.AttachShader(Handle, vertex);
     gl.AttachShader(Handle, fragment);
 
-    // GLSL 130 nao tem layout(location=...), entao fixamos os indices aqui (antes do link).
+    // GLSL 130 nao tem layout(location=...); fixar antes do link.
     foreach (var (location, name) in attribs)
       gl.BindAttribLocation(Handle, location, name);
 
@@ -59,7 +55,6 @@ public sealed class Shader : IDisposable
   public void Dispose() => _gl.DeleteProgram(Handle);
 }
 
-/// <summary>Le os shaders "bakeados" no exe como recurso embutido (sem dependencia de arquivo).</summary>
 public static class EmbeddedShader
 {
   public static string Load(string fileName)

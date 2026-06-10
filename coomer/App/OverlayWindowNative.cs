@@ -2,10 +2,6 @@ using System.Runtime.InteropServices;
 
 namespace Coomer.App;
 
-/// <summary>
-/// Ajustes Win32 na janela do overlay: tira da barra de tarefas / Alt+Tab
-/// (marcando como tool window) e traz pra frente com foco.
-/// </summary>
 internal static partial class OverlayWindowNative
 {
   private const int GWL_EXSTYLE = -20;
@@ -22,7 +18,7 @@ internal static partial class OverlayWindowNative
   [return: MarshalAs(UnmanagedType.Bool)]
   public static partial bool SetForegroundWindow(nint hWnd);
 
-  /// <summary>Marca a janela como tool window: some da barra de tarefas e do Alt+Tab.</summary>
+  // Tool window: some da barra de tarefas e do Alt+Tab.
   public static void HideFromTaskbar(nint hWnd)
   {
     if (hWnd == 0) return;
