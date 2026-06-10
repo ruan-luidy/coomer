@@ -116,10 +116,20 @@ public sealed unsafe class Renderer : IDisposable
     _shader.SetInt("flClearGlass", config.FlashlightClearGlass ? 1 : 0);
     _shader.SetFloat("clearGlassZoom", config.ClearGlassZoom);
 
+    bool invertActive = exporter != null && exporter.Dragging;
+    _shader.SetInt("invertRect", invertActive ? 1 : 0);
+    if (invertActive)
+    {
+      var a = exporter!.Start;
+      var b = exporter.End;
+      _shader.SetVec2("invertMin", new Vector2(MathF.Min(a.X, b.X), MathF.Min(a.Y, b.Y)));
+      _shader.SetVec2("invertMax", new Vector2(MathF.Max(a.X, b.X), MathF.Max(a.Y, b.Y)));
+    }
+
     _gl.BindVertexArray(_vao);
     _gl.DrawElements(PrimitiveType.Triangles, 6, DrawElementsType.UnsignedInt, (void*)0);
 
-    _strokes.Draw(drawTool, camera, mirror, windowSize, _screenshot, cursor, history, exporter);
+    _strokes.Draw(drawTool, camera, mirror, windowSize, _screenshot, cursor, history);
   }
 
   public void Dispose()

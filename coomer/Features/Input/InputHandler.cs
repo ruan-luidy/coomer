@@ -24,6 +24,8 @@ public sealed class InputHandler
   private Mouse _mouse;
   private bool _ctrl;
   private bool _shift;
+  private bool _space;
+  private bool _spacePan; // commit no mousedown: drag virou pan ate o mouseup
   private bool _flashlightCursorHidden;
 
   public bool Quitting { get; private set; }
@@ -95,6 +97,10 @@ public sealed class InputHandler
       case Key.ShiftLeft:
       case Key.ShiftRight:
         _shift = true;
+        break;
+
+      case Key.Space:
+        _space = true;
         break;
 
       case Key.Number0:
@@ -199,6 +205,7 @@ public sealed class InputHandler
   {
     if (key is Key.ControlLeft or Key.ControlRight) _ctrl = false;
     else if (key is Key.ShiftLeft or Key.ShiftRight) _shift = false;
+    else if (key is Key.Space) _space = false;
     else if (key is Key.Q or Key.Escape)
     {
       if (_exporter.Active) { _exporter.Cancel(); return; }
@@ -217,7 +224,7 @@ public sealed class InputHandler
       return;
     }
 
-    if (_draw.IsEnabled && !_draw.StampMode && _mouse.Drag)
+    if (_draw.IsEnabled && !_draw.StampMode && _mouse.Drag && !_spacePan)
     {
       _draw.Move(_mouse.Current, new Vector2(_screenshot.Width, _screenshot.Height),
                  _screenshot, _camera, Mirror);
@@ -254,19 +261,30 @@ public sealed class InputHandler
       return;
     }
 
-    if (button == MouseButton.Left && _draw.IsEnabled && _draw.StampMode)
+    if (button == MouseButton.Left && _draw.IsEnabled && _draw.StampMode && !_space)
     {
       _draw.DropStamp(_mouse.Current, new Vector2(_screenshot.Width, _screenshot.Height),
                       _screenshot, _camera, Mirror);
       return;
     }
 
-    if (button == MouseButton.Left && _draw.IsEnabled)
+    if (button == MouseButton.Left && _draw.IsEnabled && !_space)
     {
       _mouse.Previous = _mouse.Current;
       _mouse.Drag = true;
       _draw.Begin(_mouse.Current, new Vector2(_screenshot.Width, _screenshot.Height),
                   _screenshot, _camera, Mirror);
+      return;
+    }
+
+    // space segurado em draw mode = pan temporario (classico)
+    if (button == MouseButton.Left && _draw.IsEnabled && _space)
+    {
+      _mouse.Previous = _mouse.Current;
+      _mouse.Drag = true;
+      _spacePan = true;
+      _camera.Velocity = Vector2.Zero;
+      _camera.LerpingToTarget = false;
       return;
     }
 
@@ -290,7 +308,8 @@ public sealed class InputHandler
     if (button == MouseButton.Left)
     {
       if (_exporter.Dragging) _exporter.Finish();
-      if (_draw.IsEnabled && !_draw.StampMode) _draw.End();
+      if (_draw.IsEnabled && !_draw.StampMode && !_spacePan) _draw.End();
+      _spacePan = false;
       _mouse.Drag = false;
     }
   }

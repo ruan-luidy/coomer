@@ -24,6 +24,20 @@ uniform float fisheyeStrength;
 uniform bool flClearGlass;
 uniform float clearGlassZoom;
 
+uniform bool invertRect;
+uniform vec2 invertMin;
+uniform vec2 invertMax;
+
+vec4 applyInvert(vec4 c)
+{
+    if (!invertRect) return c;
+    vec2 fs = vec2(gl_FragCoord.x, windowSize.y - gl_FragCoord.y);
+    if (fs.x >= invertMin.x && fs.x <= invertMax.x
+        && fs.y >= invertMin.y && fs.y <= invertMax.y)
+        return vec4(1.0 - c.rgb, c.a);
+    return c;
+}
+
 // Gaussian blur com pesos exp(-d2/(2sigma2)). samples teto em 8 pra nao
 // explodir em telas grandes; sigma = radius*0.5 deixa a curva mais chata
 // (pesos das bordas significativos), ai o blur aparece mesmo com o anel
@@ -100,7 +114,7 @@ void main()
         : texture(tex, effective_texcoord);
 
     if (!flEnabled && flShadow < 0.001) {
-        color = base;
+        color = applyInvert(base);
         return;
     }
 
@@ -117,14 +131,14 @@ void main()
 
     // fora da bolha — entrega o anel direto
     if (sd >= 0.0) {
-        color = bgColor;
+        color = applyInvert(bgColor);
         return;
     }
 
     // lanterna desligando (animacao do shadow indo a zero) — sem vidro,
     // so suaviza a transicao da textura interna pro anel.
     if (!flEnabled) {
-        color = mix(base, bgColor, edgeAlpha);
+        color = applyInvert(mix(base, bgColor, edgeAlpha));
         return;
     }
 
@@ -144,7 +158,7 @@ void main()
         vec2 displ = sampleOffset - d;
         if (mirror) displ.x = -displ.x;
         vec2 fishUV = effective_texcoord + displ / windowSize;
-        color = mix(texture(tex, fishUV), bgColor, edgeAlpha);
+        color = applyInvert(mix(texture(tex, fishUV), bgColor, edgeAlpha));
         return;
     }
 
@@ -159,7 +173,7 @@ void main()
         vec2 displ = d / zoom - d;
         if (mirror) displ.x = -displ.x;
         vec2 glassUV = effective_texcoord + displ / windowSize;
-        color = mix(texture(tex, glassUV), bgColor, edgeAlpha);
+        color = applyInvert(mix(texture(tex, glassUV), bgColor, edgeAlpha));
         return;
     }
 
@@ -190,5 +204,5 @@ void main()
     vec4 glassColor = clamp(mix(refractColor, reflectColor, reflectionFactor),
                             0.0, 1.0);
 
-    color = mix(glassColor, bgColor, edgeAlpha);
+    color = applyInvert(mix(glassColor, bgColor, edgeAlpha));
 }

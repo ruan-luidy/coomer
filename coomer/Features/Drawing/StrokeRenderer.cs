@@ -56,15 +56,13 @@ public sealed unsafe class StrokeRenderer : IDisposable
   }
 
   public void Draw(DrawTool tool, Camera camera, bool mirror, Vector2 windowSize,
-                   Screenshot shot, Vector2 cursorScreen,
-                   ColorHistory? history, RegionExporter? exporter)
+                   Screenshot shot, Vector2 cursorScreen, ColorHistory? history)
   {
     bool wantsBrushRing = tool.IsEnabled && !tool.StampMode;
     bool wantsStamps = !tool.Hide && tool.Stamps.Count > 0;
     bool wantsStrokes = !tool.Hide && tool.Strokes.Count > 0;
     bool wantsHistory = history != null && history.Entries.Count > 0;
-    bool wantsRegionRect = exporter != null && exporter.Dragging;
-    if (!wantsBrushRing && !wantsStamps && !wantsStrokes && !wantsHistory && !wantsRegionRect)
+    if (!wantsBrushRing && !wantsStamps && !wantsStrokes && !wantsHistory)
       return;
 
     var screenshotSize = new Vector2(shot.Width, shot.Height);
@@ -122,14 +120,6 @@ public sealed unsafe class StrokeRenderer : IDisposable
     if (wantsHistory)
     {
       DrawColorSwatches(history!, windowSize);
-    }
-
-    if (wantsRegionRect && exporter != null)
-    {
-      _verts.Clear();
-      BuildRectOutline(exporter.Start, exporter.End, 1.5f, _verts);
-      if (_verts.Count > 0)
-        UploadAndDraw(_verts, new Vector4(0.2f, 0.8f, 1f, 1f));
     }
 
     _shader.SetInt("uScreenSpace", 0);
@@ -246,20 +236,31 @@ public sealed unsafe class StrokeRenderer : IDisposable
   {
     EmitSmoothFree(pts, h, v);
 
+    float totalLen = 0f;
+    for (int i = 1; i < pts.Count; i++) totalLen += (pts[i] - pts[i - 1]).Length();
+
+    // Head proporcional, capada em 30% do path. Pula a cabeca se o path nao
+    // tem sequer 2x a cabeca de comprimento — evita seta zoada em rabisco curto.
+    float baseHead = MathF.Max(thickness * 6f, 18f);
+    float headLen = MathF.Min(baseHead, totalLen * 0.30f);
+    if (totalLen < headLen * 2f) return;
+
+    // Tangente: caminha headLen pra tras ao longo do path (nao linha reta) pra
+    // amaciar jitter das ultimas amostras e seguir a curvatura real.
     var end = pts[^1];
-    Vector2 from = pts[0];
-    float minDist = MathF.Max(20f, thickness * 4f);
+    Vector2 from = end;
+    float walked = 0f;
     for (int i = pts.Count - 2; i >= 0; i--)
     {
-      if ((end - pts[i]).Length() >= minDist) { from = pts[i]; break; }
+      walked += (pts[i + 1] - pts[i]).Length();
       from = pts[i];
+      if (walked >= headLen) break;
     }
     var d = end - from;
     float len = d.Length();
-    if (len < 1f) return;
+    if (len < thickness) return;
     var dir = d / len;
 
-    float headLen = MathF.Max(thickness * 6f, 18f);
     const float theta = 0.5f;
     float cs = MathF.Cos(theta), sn = MathF.Sin(theta);
     var backDir = -dir;
