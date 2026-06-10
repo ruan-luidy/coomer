@@ -152,6 +152,11 @@ public sealed unsafe class StrokeRenderer : IDisposable
           EmitSeg(s.Points[0], s.Points[1], h, verts);
         break;
 
+      case DrawShape.Arrow:
+        if (s.Points.Count >= 2)
+          EmitArrow(s.Points[0], s.Points[1], h, s.Thickness, verts);
+        break;
+
       case DrawShape.Rect:
         if (s.Points.Count >= 2)
         {
@@ -167,6 +172,65 @@ public sealed unsafe class StrokeRenderer : IDisposable
           EmitSeg(bl, tl, h, verts);
         }
         break;
+
+      case DrawShape.Circle:
+        if (s.Points.Count >= 2)
+        {
+          var center = s.Points[0];
+          float radius = (s.Points[1] - center).Length();
+          EmitCircle(center, radius, h, verts);
+        }
+        break;
+    }
+  }
+
+  // Seta = shaft (a->b) + dois segmentos da cabeca saindo de b voltando ao longo
+  // de -dir, rotacionados +/- theta. Comprimento da cabeca: proporcional ao
+  // shaft mas com piso/teto pra parecer setinha mesmo em arrasto curto/longo.
+  private static void EmitArrow(Vector2 a, Vector2 b, float h, float thickness, List<float> v)
+  {
+    var d = b - a;
+    float len = d.Length();
+    if (len < 1f)
+    {
+      EmitSeg(a, b, h, v);
+      return;
+    }
+    var dir = d / len;
+    EmitSeg(a, b, h, v); // shaft
+
+    // Cabeca: 30% do shaft, no minimo 6*thickness, no maximo 50% do shaft.
+    float headLen = Math.Clamp(len * 0.30f, thickness * 6f, len * 0.50f);
+    const float theta = 0.5f; // ~28.6 graus de abertura
+    float cs = MathF.Cos(theta), sn = MathF.Sin(theta);
+
+    var backDir = -dir;
+    var leftDir = new Vector2(
+      backDir.X * cs - backDir.Y * sn,
+      backDir.X * sn + backDir.Y * cs);
+    var rightDir = new Vector2(
+      backDir.X * cs + backDir.Y * sn,
+      -backDir.X * sn + backDir.Y * cs);
+
+    EmitSeg(b, b + leftDir * headLen, h, v);
+    EmitSeg(b, b + rightDir * headLen, h, v);
+  }
+
+  // Circulo do shape Circle: poligono regular com N segmentos. N cresce com o
+  // raio pra nao virar octogono em circulo grande. Cada segmento tem espessura
+  // h (igual aos outros shapes).
+  private static void EmitCircle(Vector2 center, float radius, float h, List<float> v)
+  {
+    if (radius < 1f) return;
+    int n = Math.Clamp(32 + (int)(radius * 0.4f), 40, 128);
+    float dPhi = MathF.PI * 2f / n;
+    var prev = center + new Vector2(radius, 0f);
+    for (int i = 1; i <= n; i++)
+    {
+      float ang = i * dPhi;
+      var cur = center + new Vector2(MathF.Cos(ang), MathF.Sin(ang)) * radius;
+      EmitSeg(prev, cur, h, v);
+      prev = cur;
     }
   }
 
