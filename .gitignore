@@ -12,6 +12,7 @@ obj/
 # NativeAOT / publish
 publish/
 publish-*/
+dist/
 *.pdb
 
 # release assets

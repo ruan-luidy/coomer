@@ -277,13 +277,32 @@ public sealed unsafe class StrokeRenderer : IDisposable
     if (len < thickness) return;
     var dir = d / len;
 
+    EmitArrowHead(end, dir, headLen, h, v);
+  }
+
+  // Cabeca de seta solida: triangulo preenchido (alpha=1 chapado via SDF com
+  // halfWidth gigante) + silhueta em capsulas pro anti-alias da borda. Bem mais
+  // limpo que o "V" de dois risquinhos. theta = meio-angulo da barba.
+  private static void EmitArrowHead(Vector2 tip, Vector2 dir, float headLen, float h, List<float> v)
+  {
     const float theta = 0.5f;
     float cs = MathF.Cos(theta), sn = MathF.Sin(theta);
-    var backDir = -dir;
-    var leftDir = new Vector2(backDir.X * cs - backDir.Y * sn, backDir.X * sn + backDir.Y * cs);
-    var rightDir = new Vector2(backDir.X * cs + backDir.Y * sn, -backDir.X * sn + backDir.Y * cs);
-    EmitSeg(end, end + leftDir * headLen, h, v);
-    EmitSeg(end, end + rightDir * headLen, h, v);
+    var back = -dir;
+    var leftDir = new Vector2(back.X * cs - back.Y * sn, back.X * sn + back.Y * cs);
+    var rightDir = new Vector2(back.X * cs + back.Y * sn, -back.X * sn + back.Y * cs);
+    var l = tip + leftDir * headLen;
+    var r = tip + rightDir * headLen;
+
+    // Preenchimento: triangulo real, distancia ao centroide << halfWidth => alpha 1.
+    var cen = (tip + l + r) / 3f;
+    AddVertex(v, tip, cen, cen, 1e6f);
+    AddVertex(v, l, cen, cen, 1e6f);
+    AddVertex(v, r, cen, cen, 1e6f);
+
+    // Silhueta AA (mesma cor opaca => sem escurecer sobreposicao).
+    EmitSeg(tip, l, h, v);
+    EmitSeg(l, r, h, v);
+    EmitSeg(r, tip, h, v);
   }
 
   // p(theta) = center + cos(theta)*axA + sin(theta)*axB
@@ -349,13 +368,7 @@ public sealed unsafe class StrokeRenderer : IDisposable
     float maxHead = len * 0.50f;
     float floor = MathF.Min(thickness * 6f, maxHead);
     float headLen = Math.Clamp(len * 0.30f, floor, maxHead);
-    const float theta = 0.5f;
-    float cs = MathF.Cos(theta), sn = MathF.Sin(theta);
-    var backDir = -dir;
-    var leftDir = new Vector2(backDir.X * cs - backDir.Y * sn, backDir.X * sn + backDir.Y * cs);
-    var rightDir = new Vector2(backDir.X * cs + backDir.Y * sn, -backDir.X * sn + backDir.Y * cs);
-    EmitSeg(b, b + leftDir * headLen, h, v);
-    EmitSeg(b, b + rightDir * headLen, h, v);
+    EmitArrowHead(b, dir, headLen, h, v);
   }
 
   // Numero em 7-segment-display centrado no stamp. Suporta 1-99 (>99 vira "99").

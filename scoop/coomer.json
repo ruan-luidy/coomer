@@ -1,0 +1,31 @@
+{
+  "version": "0.2.0",
+  "description": "Zoomer + annotation overlay for Windows.",
+  "homepage": "https://github.com/ruan-luidy/coomer",
+  "license": "MIT",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/ruan-luidy/coomer/releases/download/v0.2.0/coomer-v0.2.0-win-x64.zip",
+      "hash": ""
+    }
+  },
+  "bin": "coomer.exe",
+  "shortcuts": [
+    [
+      "coomer.exe",
+      "coomer"
+    ]
+  ],
+  "notes": [
+    "Rode 'coomer' uma vez pra deixar residente (Ctrl+Alt+Z abre o overlay).",
+    "Pra iniciar junto com o Windows: coomer --install"
+  ],
+  "checkver": "github",
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/ruan-luidy/coomer/releases/download/v$version/coomer-v$version-win-x64.zip"
+      }
+    }
+  }
+}

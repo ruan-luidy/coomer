@@ -5,10 +5,14 @@ using Coomer.Features.Hotkey;
 using Silk.NET.Windowing.Glfw;
 using Silk.NET.Input.Glfw;
 
+// CLI: --install / --uninstall / --version / --help. Sai sem abrir overlay.
+if (Installer.TryHandle(args, out int cliExit))
+  return cliExit;
+
 // Instancia unica — senao RegisterHotKey conflita.
 using var singleton = new Mutex(true, "coomer-singleton", out bool isNew);
 if (!isNew)
-  return;
+  return 0;
 
 // Backend GLFW na mao (necessario em publish, fora do dotnet run).
 GlfwWindowing.RegisterPlatform();
@@ -35,3 +39,5 @@ new HotkeyHost().Run(onShow: () =>
     // Falha no overlay nao pode derrubar o processo residente.
   }
 });
+
+return 0;

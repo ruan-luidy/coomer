@@ -1,10 +1,12 @@
 name: release
 
-# Roda quando voce empurra uma tag tipo v1.2.3 — builda self-contained win-x64,
-# zipa, e cria a release no github com release notes geradas a partir dos commits.
+# Roda quando voce empurra uma tag tipo v1.2.3. Builda NativeAOT (exe unico,
+# self-contained), zipa coomer.exe + glfw3.dll, cria a release no github e
+# atualiza o manifest do Scoop (scoop/coomer.json) com a url/hash novos.
 #
-# Fluxo: bumpa <Version> no csproj (opcional, o workflow injeta a partir da tag),
-# commita, "git tag -a vX.Y.Z -m '...'", "git push --follow-tags".
+# Fluxo: "git tag -a vX.Y.Z -m '...'" e "git push --follow-tags".
+# Os runners windows-latest ja tem MSVC + vswhere no PATH, entao o AOT linka
+# direto sem precisar do build.ps1.
 on:
   push:
     tags:
@@ -24,21 +26,21 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Publish (self-contained win-x64)
+      - name: Publish (NativeAOT win-x64)
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}" -replace '^v', ''
           dotnet publish coomer -c Release -r win-x64 `
-            -p:PublishAot=false `
             -p:Version=$version `
-            --self-contained `
-            -o publish-release
+            -o dist
+          Remove-Item dist\coomer.pdb -ErrorAction SilentlyContinue
+          Get-ChildItem dist | Select-Object Name, Length
 
       - name: Zip
         shell: pwsh
         run: |
           $tag = "${{ github.ref_name }}"
-          Compress-Archive -Path "publish-release\*" -DestinationPath "coomer-$tag-win-x64.zip" -CompressionLevel Optimal
+          Compress-Archive -Path "dist\*" -DestinationPath "coomer-$tag-win-x64.zip" -CompressionLevel Optimal
 
       - name: Create release
         env:
@@ -48,3 +50,25 @@ jobs:
           gh release create "${{ github.ref_name }}" "./coomer-${{ github.ref_name }}-win-x64.zip" `
             --title "coomer ${{ github.ref_name }}" `
             --generate-notes
+
+      - name: Update Scoop manifest
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag -replace '^v', ''
+          $zip = "coomer-$tag-win-x64.zip"
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          $url = "https://github.com/${{ github.repository }}/releases/download/$tag/$zip"
+
+          $manifestPath = "scoop/coomer.json"
+          $m = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          $m.version = $version
+          $m.architecture.'64bit'.url = $url
+          $m.architecture.'64bit'.hash = $hash
+          ($m | ConvertTo-Json -Depth 10) | Set-Content $manifestPath -Encoding utf8
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add $manifestPath
+          git commit -m "scoop: bump to $version"
+          git push origin "HEAD:${{ github.event.repository.default_branch }}"
