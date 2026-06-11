@@ -1,8 +1,15 @@
 using System.Globalization;
+using System.Text;
 
 namespace Coomer.Features.Configuration;
 
-// Config simples chave=valor em %APPDATA%/coomer/config.
+// Config em sintaxe Lua-ish em %APPDATA%/coomer/config.lua
+//   -- comentario de linha
+//   --[[ comentario em bloco ]]
+//   key = value         (number)
+//   key = true|false    (bool)
+//   key = "string"      (string)
+// Sem tabelas/funcoes/expressoes, so atribuicao direta.
 public sealed class Config
 {
   public float MinScale { get; set; } = 1.0f;
@@ -34,15 +41,21 @@ public sealed class Config
   public bool FlashlightClearGlass { get; set; } = false;
   public float ClearGlassZoom { get; set; } = 1.10f;
 
+  // "negative" ou "glass" — controla o efeito dentro do rect de print (tecla B)
+  public string PrintEffect { get; set; } = "negative";
+
   public static Config Default() => new();
 
   public static Config Load(string path)
   {
     var config = Default();
-    foreach (var raw in File.ReadLines(path))
+    var raw = File.ReadAllText(path);
+    var clean = StripBlockComments(raw);
+
+    foreach (var rawLine in clean.Split('\n'))
     {
-      var line = raw.Trim();
-      if (line.Length == 0 || line[0] == '#')
+      var line = StripLineComment(rawLine).Trim();
+      if (line.Length == 0)
         continue;
 
       var idx = line.IndexOf('=');
@@ -51,8 +64,6 @@ public sealed class Config
 
       var key = line[..idx].Trim();
       var value = line[(idx + 1)..].Trim();
-      var hash = value.IndexOf('#');
-      if (hash >= 0) value = value[..hash].Trim();
 
       switch (key)
       {
@@ -61,7 +72,7 @@ public sealed class Config
         case "drag_friction": config.DragFriction = ParseFloat(value); break;
         case "scale_friction": config.ScaleFriction = ParseFloat(value); break;
 
-        case "camera_pan_amount": config.CameraPanAmount  = ParseFloat(value); break;
+        case "camera_pan_amount": config.CameraPanAmount = ParseFloat(value); break;
         case "lerp_camera_recenter": config.LerpCameraRecenter = ParseBool(value); break;
         case "camera_recenter_lerp_speed": config.CameraRecenterLerpSpeed = ParseFloat(value); break;
         case "hide_cursor_on_flashlight": config.HideCursorOnFlashlight = ParseBool(value); break;
@@ -84,6 +95,8 @@ public sealed class Config
         case "fisheye_strength": config.FisheyeStrength = ParseFloat(value); break;
         case "flashlight_clear_glass": config.FlashlightClearGlass = ParseBool(value); break;
         case "clear_glass_zoom": config.ClearGlassZoom = ParseFloat(value); break;
+
+        case "print_effect": config.PrintEffect = ParseString(value); break;
 
         default: throw new InvalidDataException($"Chave de config desconhecida `{key}`");
       }
@@ -122,6 +135,8 @@ public sealed class Config
     FisheyeStrength = fresh.FisheyeStrength;
     FlashlightClearGlass = fresh.FlashlightClearGlass;
     ClearGlassZoom = fresh.ClearGlassZoom;
+
+    PrintEffect = fresh.PrintEffect;
   }
 
   public void Save(string path)
@@ -132,17 +147,19 @@ public sealed class Config
 
     var c = CultureInfo.InvariantCulture;
     using var w = new StreamWriter(path);
+    w.WriteLine("-- coomer config (Lua-ish: -- coments, key = value)");
+    w.WriteLine();
     w.WriteLine($"min_scale = {MinScale.ToString(c)}");
     w.WriteLine($"scroll_speed = {ScrollSpeed.ToString(c)}");
     w.WriteLine($"drag_friction = {DragFriction.ToString(c)}");
     w.WriteLine($"scale_friction = {ScaleFriction.ToString(c)}");
-
+    w.WriteLine();
     w.WriteLine($"camera_pan_amount = {CameraPanAmount.ToString(c)}");
     w.WriteLine($"lerp_camera_recenter = {(LerpCameraRecenter ? "true" : "false")}");
     w.WriteLine($"camera_recenter_lerp_speed = {CameraRecenterLerpSpeed.ToString(c)}");
     w.WriteLine($"hide_cursor_on_flashlight = {(HideCursorOnFlashlight ? "true" : "false")}");
     w.WriteLine($"pan_inertia = {(PanInertia ? "true" : "false")}");
-
+    w.WriteLine();
     w.WriteLine($"bubble_mass = {BubbleMass.ToString(c)}");
     w.WriteLine($"bubble_spring_k = {BubbleSpringK.ToString(c)}");
     w.WriteLine($"bubble_damping = {BubbleDamping.ToString(c)}");
@@ -150,22 +167,64 @@ public sealed class Config
     w.WriteLine($"bubble_squeeze_factor = {BubbleSqueezeFactor.ToString(c)}");
     w.WriteLine($"bubble_deform_smoothing = {BubbleDeformSmoothing.ToString(c)}");
     w.WriteLine($"bubble_rigid = {(BubbleRigid ? "true" : "false")}");
-
+    w.WriteLine();
     w.WriteLine($"blur_background = {(BlurBackground ? "true" : "false")}");
     w.WriteLine($"background_blur_radius = {BackgroundBlurRadius.ToString(c)}");
     w.WriteLine($"blur_outside_flashlight = {(BlurOutsideFlashlight ? "true" : "false")}");
     w.WriteLine($"outside_flashlight_blur_radius = {OutsideFlashlightBlurRadius.ToString(c)}");
-
+    w.WriteLine();
     w.WriteLine($"flashlight_fisheye = {(FlashlightFisheye ? "true" : "false")}");
     w.WriteLine($"fisheye_strength = {FisheyeStrength.ToString(c)}");
     w.WriteLine($"flashlight_clear_glass = {(FlashlightClearGlass ? "true" : "false")}");
     w.WriteLine($"clear_glass_zoom = {ClearGlassZoom.ToString(c)}");
+    w.WriteLine();
+    w.WriteLine("-- print_effect:");
+    w.WriteLine("--   \"negative\" = inverte cor dentro do rect (1 - rgb)");
+    w.WriteLine("--   \"glass\"    = escurece fora do rect, dentro fica natural (spotlight)");
+    w.WriteLine($"print_effect = \"{PrintEffect}\"");
+  }
+
+  private static string StripBlockComments(string s)
+  {
+    var sb = new StringBuilder(s.Length);
+    int i = 0;
+    while (i < s.Length)
+    {
+      if (i + 3 < s.Length && s[i] == '-' && s[i + 1] == '-'
+          && s[i + 2] == '[' && s[i + 3] == '[')
+      {
+        int end = s.IndexOf("]]", i + 4, StringComparison.Ordinal);
+        if (end < 0) break;
+        i = end + 2;
+        continue;
+      }
+      sb.Append(s[i++]);
+    }
+    return sb.ToString();
+  }
+
+  private static string StripLineComment(string line)
+  {
+    int dashes = line.IndexOf("--", StringComparison.Ordinal);
+    int hash = line.IndexOf('#'); // backward-compat com formato antigo
+    int cut = -1;
+    if (dashes >= 0 && (hash < 0 || dashes < hash)) cut = dashes;
+    else if (hash >= 0) cut = hash;
+    return cut >= 0 ? line[..cut] : line;
   }
 
   private static float ParseFloat(string s) => float.Parse(s, CultureInfo.InvariantCulture);
+
   private static bool ParseBool(string s) =>
-     s.Equals("true", StringComparison.OrdinalIgnoreCase)
-  || s.Equals("yes", StringComparison.OrdinalIgnoreCase)
-  || s.Equals("on", StringComparison.OrdinalIgnoreCase)
-  || s == "1";
+       s.Equals("true", StringComparison.OrdinalIgnoreCase)
+    || s.Equals("yes", StringComparison.OrdinalIgnoreCase)
+    || s.Equals("on", StringComparison.OrdinalIgnoreCase)
+    || s == "1";
+
+  private static string ParseString(string s)
+  {
+    if (s.Length >= 2 && (s[0] == '"' || s[0] == '\'') && s[^1] == s[0])
+      return s[1..^1];
+    return s;
+  }
 }

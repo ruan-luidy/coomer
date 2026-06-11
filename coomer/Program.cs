@@ -22,12 +22,18 @@ Screenshot.EnableDpiAwareness();
 
 string configDir = Path.Combine(
     Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "coomer");
-string configPath = Path.Combine(configDir, "config");
+string luaPath = Path.Combine(configDir, "config.lua");
+string legacyPath = Path.Combine(configDir, "config");
 
 new HotkeyHost().Run(onShow: () =>
 {
   try
   {
+    // re-checa a cada abertura pra que criar o config.lua sem reiniciar
+    // o processo residente tambem pegue ele de imediato.
+    string configPath = File.Exists(luaPath) ? luaPath
+                      : (File.Exists(legacyPath) ? legacyPath : luaPath);
+
     Config config;
     try { config = File.Exists(configPath) ? Config.Load(configPath) : Config.Default(); }
     catch { config = Config.Default(); }

@@ -55,7 +55,8 @@ public sealed unsafe class StickerRenderer : IDisposable
                          Screenshot shot, Vector2 cursorScreen, StickerCache cache,
                          StickerState state, Coomer.Features.Capture.RegionExporter? exporter,
                          Coomer.Features.Lighting.Flashlight flashlight,
-                         Coomer.Features.Text.TextRenderer textRenderer)
+                         Coomer.Features.Text.TextRenderer textRenderer,
+                         int invertMode)
   {
     bool hasSticker = !tool.Hide && tool.StickerStamps.Count > 0;
     bool wantsGhost = tool.IsEnabled && tool.StickerMode && state.Current != null && tool.SelectedStickerIndex < 0;
@@ -74,6 +75,7 @@ public sealed unsafe class StickerRenderer : IDisposable
 
     bool invertActive = exporter != null && exporter.Dragging;
     _shader.SetInt("invertRect", invertActive ? 1 : 0);
+    _shader.SetInt("invertMode", invertMode);
     _shader.SetVec2("fragWindowSize", windowSize);
     if (invertActive)
     {

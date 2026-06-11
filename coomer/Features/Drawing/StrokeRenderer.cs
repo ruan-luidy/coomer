@@ -57,7 +57,7 @@ public sealed unsafe class StrokeRenderer : IDisposable
 
   public void Draw(DrawTool tool, Camera camera, bool mirror, Vector2 windowSize,
                    Screenshot shot, Vector2 cursorScreen, ColorHistory? history,
-                   RegionExporter? exporter)
+                   RegionExporter? exporter, int invertMode)
   {
     bool wantsBrushRing = tool.IsEnabled && !tool.StampMode && !tool.StickerMode;
     bool wantsStamps = !tool.Hide && tool.Stamps.Count > 0;
@@ -77,6 +77,7 @@ public sealed unsafe class StrokeRenderer : IDisposable
 
     bool invertActive = exporter != null && exporter.Dragging;
     _shader.SetInt("invertRect", invertActive ? 1 : 0);
+    _shader.SetInt("invertMode", invertMode);
     _shader.SetVec2("fragWindowSize", windowSize);
     if (invertActive)
     {

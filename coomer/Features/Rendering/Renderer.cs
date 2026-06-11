@@ -136,6 +136,7 @@ public sealed unsafe class Renderer : IDisposable
 
     bool invertActive = exporter != null && exporter.Dragging;
     _shader.SetInt("invertRect", invertActive ? 1 : 0);
+    _shader.SetInt("invertMode", config.PrintEffect == "glass" ? 1 : 0);
     if (invertActive)
     {
       var a = exporter!.Start;
@@ -147,8 +148,9 @@ public sealed unsafe class Renderer : IDisposable
     _gl.BindVertexArray(_vao);
     _gl.DrawElements(PrimitiveType.Triangles, 6, DrawElementsType.UnsignedInt, (void*)0);
 
-    _stickerRenderer.DrawStamps(drawTool, camera, mirror, windowSize, _screenshot, cursor, stickers, stickerState, exporter, flashlight, _text);
-    _strokes.Draw(drawTool, camera, mirror, windowSize, _screenshot, cursor, history, exporter);
+    int invertMode = config.PrintEffect == "glass" ? 1 : 0;
+    _stickerRenderer.DrawStamps(drawTool, camera, mirror, windowSize, _screenshot, cursor, stickers, stickerState, exporter, flashlight, _text, invertMode);
+    _strokes.Draw(drawTool, camera, mirror, windowSize, _screenshot, cursor, history, exporter, invertMode);
     _palette.Draw(windowSize, drawTool, stickers, stickerState);
     _hud.Draw(windowSize, drawTool, picker, exporter!, stickerState);
   }

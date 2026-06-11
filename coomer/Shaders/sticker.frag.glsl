@@ -10,6 +10,7 @@ uniform bool invertRect;
 uniform vec2 invertMin;
 uniform vec2 invertMax;
 uniform vec2 fragWindowSize;
+uniform int invertMode; // 0 = negativo, 1 = glass (passthrough nos stickers)
 
 uniform bool flEnabled;
 uniform float flShadow;
@@ -52,15 +53,10 @@ void main()
     if (invertRect)
     {
         vec2 fs = vec2(gl_FragCoord.x, fragWindowSize.y - gl_FragCoord.y);
-        if (fs.x >= invertMin.x && fs.x <= invertMax.x
-            && fs.y >= invertMin.y && fs.y <= invertMax.y)
-        {
-            vec3 inv = 1.0 - c.rgb;
-            float lum = dot(inv, vec3(0.299, 0.587, 0.114));
-            float cap = 0.55;
-            if (lum > cap) inv *= cap / lum;
-            c.rgb = inv;
-        }
+        bool inside = fs.x >= invertMin.x && fs.x <= invertMax.x
+                   && fs.y >= invertMin.y && fs.y <= invertMax.y;
+        if (invertMode == 0 && inside) c.rgb = 1.0 - c.rgb;
+        else if (invertMode == 1 && !inside) c.rgb *= 0.45;
     }
     color = c;
 }

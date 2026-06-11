@@ -27,23 +27,21 @@ uniform float clearGlassZoom;
 uniform bool invertRect;
 uniform vec2 invertMin;
 uniform vec2 invertMax;
+uniform int invertMode; // 0 = negativo (inverte dentro), 1 = spotlight (escurece fora)
 
-// Inverte rgb mas tampa a luma pra nao cegar quem ta em tema escuro
-// (preto puro invertido seria 1.0 e blastaria a tela).
-vec4 applyInvert(vec4 c)
+vec4 applyInvert(vec2 uv, vec4 c)
 {
     if (!invertRect) return c;
     vec2 fs = vec2(gl_FragCoord.x, windowSize.y - gl_FragCoord.y);
-    if (fs.x >= invertMin.x && fs.x <= invertMax.x
-        && fs.y >= invertMin.y && fs.y <= invertMax.y)
-    {
-        vec3 inv = 1.0 - c.rgb;
-        float lum = dot(inv, vec3(0.299, 0.587, 0.114));
-        float cap = 0.55;
-        if (lum > cap) inv *= cap / lum;
-        return vec4(inv, c.a);
-    }
-    return c;
+    bool inside = fs.x >= invertMin.x && fs.x <= invertMax.x
+               && fs.y >= invertMin.y && fs.y <= invertMax.y;
+
+    if (invertMode == 0)
+        return inside ? vec4(1.0 - c.rgb, c.a) : c;
+
+    // spotlight: escurece tudo que ta fora do rect, dentro fica natural.
+    // mesma intensidade que o shadow da lanterna (0.55 escurecimento).
+    return inside ? c : vec4(c.rgb * 0.45, c.a);
 }
 
 // Gaussian blur com pesos exp(-d2/(2sigma2)). samples teto em 8 pra nao
@@ -122,7 +120,7 @@ void main()
         : texture(tex, effective_texcoord);
 
     if (!flEnabled && flShadow < 0.001) {
-        color = applyInvert(base);
+        color = applyInvert(effective_texcoord, base);
         return;
     }
 
@@ -139,14 +137,14 @@ void main()
 
     // fora da bolha — entrega o anel direto
     if (sd >= 0.0) {
-        color = applyInvert(bgColor);
+        color = applyInvert(effective_texcoord, bgColor);
         return;
     }
 
     // lanterna desligando (animacao do shadow indo a zero) — sem vidro,
     // so suaviza a transicao da textura interna pro anel.
     if (!flEnabled) {
-        color = applyInvert(mix(base, bgColor, edgeAlpha));
+        color = applyInvert(effective_texcoord, mix(base, bgColor, edgeAlpha));
         return;
     }
 
@@ -166,7 +164,7 @@ void main()
         vec2 displ = sampleOffset - d;
         if (mirror) displ.x = -displ.x;
         vec2 fishUV = effective_texcoord + displ / windowSize;
-        color = applyInvert(mix(texture(tex, fishUV), bgColor, edgeAlpha));
+        color = applyInvert(fishUV, mix(texture(tex, fishUV), bgColor, edgeAlpha));
         return;
     }
 
@@ -181,7 +179,7 @@ void main()
         vec2 displ = d / zoom - d;
         if (mirror) displ.x = -displ.x;
         vec2 glassUV = effective_texcoord + displ / windowSize;
-        color = applyInvert(mix(texture(tex, glassUV), bgColor, edgeAlpha));
+        color = applyInvert(glassUV, mix(texture(tex, glassUV), bgColor, edgeAlpha));
         return;
     }
 
@@ -212,5 +210,5 @@ void main()
     vec4 glassColor = clamp(mix(refractColor, reflectColor, reflectionFactor),
                             0.0, 1.0);
 
-    color = applyInvert(mix(glassColor, bgColor, edgeAlpha));
+    color = applyInvert(refractedUV, mix(glassColor, bgColor, edgeAlpha));
 }
