@@ -7,30 +7,76 @@ Linux/X11). `coomer` captures the monitor under the cursor and pops a zoom +
 annotation overlay on a global hotkey, then ducks back to the background. The
 process stays resident so the overlay opens instantly.
 
-## Dependencies
+## Install
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- A GPU supporting OpenGL 3.3+
+### Scoop (recommended)
 
-## Quick start
+```console
+> scoop install https://raw.githubusercontent.com/ruan-luidy/coomer/main/scoop/coomer.json
+```
+
+This drops a single self-contained `coomer.exe` (no .NET runtime needed). Run
+`coomer` once and it stays resident; open the overlay with `Ctrl+Alt+Z`.
+
+Update later with:
+
+```console
+> scoop update coomer
+```
+
+### Manual
+
+Grab `coomer-vX.Y.Z-win-x64.zip` from the
+[releases](https://github.com/ruan-luidy/coomer/releases), unzip
+(`coomer.exe` + `glfw3.dll`), and run `coomer.exe`.
+
+### Start with Windows
+
+```console
+> coomer --install     # start on login
+> coomer --uninstall   # stop starting on login
+> coomer --version
+```
+
+`--install` registers the current `coomer.exe` under the user's `Run` key, so
+it works for both the Scoop and manual installs.
+
+## Build from source
+
+Requirements: [.NET 10 SDK](https://dotnet.microsoft.com/download) and a GPU
+supporting OpenGL 3.3+.
+
+Run straight from source:
 
 ```console
 > dotnet run --project coomer
 ```
 
-Build a self-contained release (runs without .NET installed):
+Build the single-file release (NativeAOT, self-contained — same artifact Scoop
+ships):
 
 ```console
-> dotnet publish coomer -c Release -r win-x64 -p:PublishAot=false --self-contained
+> .\build.ps1
 ```
 
-The output lives under `coomer/bin/Release/net10.0/win-x64/publish/`. Run
-`coomer.exe` once and it stays in the background. Drop a shortcut into
-`shell:startup` to have it ready every login.
+The output lands in `dist\` (`coomer.exe` + `glfw3.dll`). `build.ps1` puts
+`vswhere` on `PATH` so the native linker finds the MSVC toolchain on its own —
+no *Developer PowerShell for VS* needed. Pass `-Version 0.2.1` to stamp a
+version, or `-Install` to enable autostart right after building.
 
-> For a small single-file binary, build with NativeAOT from a *Developer
-> PowerShell for VS* (`dotnet publish coomer -c Release -r win-x64`). The
-> linker needs that environment on PATH.
+> Need the old framework-dependent build instead? `dotnet publish coomer -c
+> Release -r win-x64 -p:PublishAot=false --self-contained`.
+
+## Releasing
+
+Push a `vX.Y.Z` tag and the [release workflow](.github/workflows/release.yml)
+builds the AOT exe, zips it, creates the GitHub release, and bumps
+`scoop/coomer.json` with the new url + hash:
+
+```console
+> git tag -a v0.2.1 -m "..."
+> git push --follow-tags
+```
 
 ## Controls
 
