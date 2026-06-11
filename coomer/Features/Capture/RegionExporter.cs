@@ -58,7 +58,8 @@ public sealed partial class RegionExporter
     _pendingA = Start;
     _pendingB = End;
     _pendingCopy = true;
-    CopyMode = false;
+    // CopyMode segue true ate FlushAfterRender consumir o capture, pra
+    // bolha congelada nao snapar pro cursor antes do readback.
   }
 
   public void TickStatus(float dt)
@@ -75,11 +76,14 @@ public sealed partial class RegionExporter
     if (_pendingCopy)
     {
       _pendingCopy = false;
+      CopyMode = false;
       var rect = ComputeScreenRect(_pendingA, _pendingB, screenWidth, screenHeight);
       if (rect.w >= 4 && rect.h >= 4)
       {
         var pixels = ReadPixelsBgra(gl, rect.x, rect.y, rect.w, rect.h,
                                     viewportYOffset, screenHeight);
+        DrawCursorInto(pixels, rect.w, rect.h,
+                       (int)_pendingB.X - rect.x, (int)_pendingB.Y - rect.y);
         var dib = EncodeDib(pixels, rect.w, rect.h);
         if (TrySetClipboardDib(dib))
           SetStatus($"copiado: {rect.w}x{rect.h}");
@@ -230,6 +234,62 @@ public sealed partial class RegionExporter
     catch
     {
       return null;
+    }
+  }
+
+  // Desenha uma seta tipo cursor do Windows direto no buffer BGRA. Hotspot
+  // no canto sup-esq (0,0) — a ponta aponta pro pixel (cx,cy). Vai por cima
+  // do alpha tambem (255) pra nao virar transparente no clipboard.
+  // 0 = transparente, 1 = contorno (branco), 2 = preenchimento (preto).
+  private static readonly byte[] CursorPattern = new byte[]
+  {
+    1,0,0,0,0,0,0,0,0,0,0,0,
+    1,1,0,0,0,0,0,0,0,0,0,0,
+    1,2,1,0,0,0,0,0,0,0,0,0,
+    1,2,2,1,0,0,0,0,0,0,0,0,
+    1,2,2,2,1,0,0,0,0,0,0,0,
+    1,2,2,2,2,1,0,0,0,0,0,0,
+    1,2,2,2,2,2,1,0,0,0,0,0,
+    1,2,2,2,2,2,2,1,0,0,0,0,
+    1,2,2,2,2,2,2,2,1,0,0,0,
+    1,2,2,2,2,2,2,2,2,1,0,0,
+    1,2,2,2,2,2,2,2,2,2,1,0,
+    1,2,2,2,2,2,2,1,1,1,1,1,
+    1,2,2,2,1,2,2,1,0,0,0,0,
+    1,2,2,1,1,2,2,1,0,0,0,0,
+    1,2,1,0,0,1,2,2,1,0,0,0,
+    1,1,0,0,0,1,2,2,1,0,0,0,
+    0,0,0,0,0,0,1,2,2,1,0,0,
+    0,0,0,0,0,0,1,2,2,1,0,0,
+    0,0,0,0,0,0,0,1,1,0,0,0,
+  };
+  private const int CursorW = 12;
+  private const int CursorH = 19;
+
+  private static void DrawCursorInto(byte[] bgra, int w, int h, int cx, int cy)
+  {
+    // cursor solta no canto do retangulo arrastado — empurra a seta pra dentro
+    // do buffer pra ela aparecer inteira em vez de cair fora dos limites.
+    int drawX = Math.Max(0, Math.Min(cx, w - CursorW));
+    int drawY = Math.Max(0, Math.Min(cy, h - CursorH));
+
+    for (int row = 0; row < CursorH; row++)
+    {
+      int py = drawY + row;
+      if (py < 0 || py >= h) continue;
+      for (int col = 0; col < CursorW; col++)
+      {
+        byte pix = CursorPattern[row * CursorW + col];
+        if (pix == 0) continue;
+        int px = drawX + col;
+        if (px < 0 || px >= w) continue;
+        byte v = pix == 1 ? (byte)255 : (byte)0;
+        int i = (py * w + px) * 4;
+        bgra[i + 0] = v;
+        bgra[i + 1] = v;
+        bgra[i + 2] = v;
+        bgra[i + 3] = 255;
+      }
     }
   }
 

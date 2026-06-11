@@ -79,7 +79,10 @@ public sealed class InputHandler
 
   public void Tick()
   {
-    bool wantHide = _flashlight.IsEnabled && _config.HideCursorOnFlashlight;
+    // no modo print precisa ver o cursor pra arrastar a regiao, mesmo com
+    // flashlight on. fora disso respeita o HideCursorOnFlashlight.
+    bool wantHide = _flashlight.IsEnabled && _config.HideCursorOnFlashlight
+                    && !_exporter.Active;
     if (wantHide != _flashlightCursorHidden)
     {
       OverlayWindowNative.SetCursorVisible(!wantHide);

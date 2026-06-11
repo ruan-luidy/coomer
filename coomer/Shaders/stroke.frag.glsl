@@ -32,7 +32,13 @@ void main()
         vec2 fs = vec2(gl_FragCoord.x, fragWindowSize.y - gl_FragCoord.y);
         if (fs.x >= invertMin.x && fs.x <= invertMax.x
             && fs.y >= invertMin.y && fs.y <= invertMax.y)
-            rgb = 1.0 - rgb;
+        {
+            vec3 inv = 1.0 - rgb;
+            float lum = dot(inv, vec3(0.299, 0.587, 0.114));
+            float cap = 0.55;
+            if (lum > cap) inv *= cap / lum;
+            rgb = inv;
+        }
     }
     color = vec4(rgb, uColor.a * alpha);
 }

@@ -114,7 +114,9 @@ public sealed class CoomerApp
 
     _handler.Tick();
     _camera.Update(_config, dt, _handler.Dragging, windowSize);
-    _flashlight.Update(_config, dt, _handler.CursorPosition);
+    // congela a bolha no modo print pra dar pra capturar ela junto
+    if (!_exporter.Active)
+      _flashlight.Update(_config, dt, _handler.CursorPosition);
     _exporter.TickStatus(dt);
     _ripple.Tick(dt);
 
