@@ -6,7 +6,7 @@
   "architecture": {
     "64bit": {
       "url": "https://github.com/ruan-luidy/coomer/releases/download/v0.2.1/coomer-v0.2.1-win-x64.zip",
-      "hash": ""
+      "hash": "650f22e7913e90fc1419df2c23d2df2bb095e8cea881af3a601cc88af1cfbd5d"
     }
   },
   "bin": "coomer.exe",
