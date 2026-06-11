@@ -16,6 +16,13 @@
       "coomer"
     ]
   ],
+  "pre_install": [
+    "if (Get-Process -Name coomer -ErrorAction SilentlyContinue) {",
+    "  Write-Host 'coomer ta rodando — fechando antes de atualizar...' -ForegroundColor Yellow",
+    "  Stop-Process -Name coomer -Force -ErrorAction SilentlyContinue",
+    "  Start-Sleep -Milliseconds 600",
+    "}"
+  ],
   "notes": [
     "Rode 'coomer' uma vez pra deixar residente (Ctrl+Alt+Z abre o overlay).",
     "Pra iniciar junto com o Windows: coomer --install"
