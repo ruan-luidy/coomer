@@ -42,14 +42,24 @@ jobs:
           $tag = "${{ github.ref_name }}"
           Compress-Archive -Path "dist\*" -DestinationPath "coomer-$tag-win-x64.zip" -CompressionLevel Optimal
 
-      - name: Create release
+      - name: Create or update release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
-          gh release create "${{ github.ref_name }}" "./coomer-${{ github.ref_name }}-win-x64.zip" `
-            --title "coomer ${{ github.ref_name }}" `
-            --generate-notes
+          $tag = "${{ github.ref_name }}"
+          $zip = "./coomer-$tag-win-x64.zip"
+          # se a release ja foi criada na mao antes da tag chegar aqui,
+          # so atualiza o asset em vez de quebrar com "already exists".
+          gh release view $tag --json tagName 2>$null | Out-Null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "release $tag ja existe — atualizando asset"
+            gh release upload $tag $zip --clobber
+          } else {
+            gh release create $tag $zip `
+              --title "coomer $tag" `
+              --generate-notes
+          }
 
       - name: Update Scoop manifest
         shell: pwsh
@@ -70,5 +80,11 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add $manifestPath
-          git commit -m "scoop: bump to $version"
-          git push origin "HEAD:${{ github.event.repository.default_branch }}"
+          # sem diff = nada pra commitar (ex: manifest ja foi bumpado na mao).
+          git diff --cached --quiet
+          if ($LASTEXITCODE -ne 0) {
+            git commit -m "scoop: bump to $version"
+            git push origin "HEAD:${{ github.event.repository.default_branch }}"
+          } else {
+            Write-Host "manifest ja esta na versao $version, sem commit"
+          }
