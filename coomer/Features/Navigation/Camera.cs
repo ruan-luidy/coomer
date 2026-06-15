@@ -24,9 +24,13 @@ public sealed class Camera
   public float TargetScale = 1.0f;
   public bool LerpingToTarget;
 
-  private readonly Vector2 _imageSize;
+  private Vector2 _imageSize;
 
   public Camera(Vector2 imageSize) => _imageSize = imageSize;
+
+  // Reaproveita a camera quando o monitor mudou de dimensao no meio do load
+  // (caso de jogo em fullscreen exclusivo / mudanca de DPI tardia).
+  public void ResizeImage(Vector2 imageSize) => _imageSize = imageSize;
 
   public Vector2 World(Vector2 v) => v / Scale;
 

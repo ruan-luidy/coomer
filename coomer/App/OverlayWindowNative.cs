@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Coomer.Features.Capture;
 
 namespace Coomer.App;
 
@@ -45,6 +46,40 @@ internal static partial class OverlayWindowNative
 
   [LibraryImport("user32.dll")]
   public static partial int ShowCursor([MarshalAs(UnmanagedType.Bool)] bool bShow);
+
+  // SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE) — Win10 2004+. Faz o
+  // DWM e qualquer API de captura (BitBlt, DXGI Desktop Duplication, etc)
+  // pular essa janela. Necessario no pet mode pra re-captura da tela nao
+  // pegar nosso proprio overlay e criar feedback loop visual.
+  private const uint WDA_NONE = 0x0;
+  private const uint WDA_EXCLUDEFROMCAPTURE = 0x11;
+
+  [LibraryImport("user32.dll", SetLastError = true)]
+  [return: MarshalAs(UnmanagedType.Bool)]
+  private static partial bool SetWindowDisplayAffinity(nint hWnd, uint dwAffinity);
+
+  public static void SetExcludeFromCapture(nint hWnd, bool exclude)
+  {
+    if (hWnd == 0) return;
+    SetWindowDisplayAffinity(hWnd, exclude ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE);
+  }
+
+  // Cursor global pra fisica de "pet" no passthrough.
+  [LibraryImport("user32.dll")]
+  [return: MarshalAs(UnmanagedType.Bool)]
+  private static partial bool GetCursorPos(out Point p);
+
+  [LibraryImport("user32.dll")]
+  [return: MarshalAs(UnmanagedType.Bool)]
+  private static partial bool SetCursorPos(int x, int y);
+
+  public static bool TryGetCursorPos(out int x, out int y)
+  {
+    if (GetCursorPos(out Point p)) { x = p.X; y = p.Y; return true; }
+    x = 0; y = 0; return false;
+  }
+
+  public static void MoveCursorTo(int x, int y) => SetCursorPos(x, y);
 
   private static bool _hidden;
 

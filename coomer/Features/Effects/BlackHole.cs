@@ -3,23 +3,21 @@ namespace Coomer.Features.Effects;
 // Estado do efeito black hole (tecla G).
 //
 // Modo: G cicla off -> interactive -> passthrough -> off.
-//   interactive: input vai pro overlay; ctrl+scroll resize, click pulsa,
-//                , cicla preset, [/] inclinacao. O buraco continua na sua
-//                Lissajous interna — sem drag (foi removido).
+//   interactive: input vai pro overlay; ctrl+scroll resize, , cicla preset,
+//                [/] inclinacao. O buraco fica na sua Lissajous interna.
 //   passthrough: window vira click-through (WS_EX_TRANSPARENT); voce mexe
 //                no PC enquanto o buraco fica desenhando por cima. Esc (via
 //                hook global de teclado, instalado pelo CoomerApp) volta pro
 //                interactive.
 //
 // Animacao: Time avanca sempre (deriva/disco). Intensity faz easing
-// exponencial em direcao a 0/1 conforme Active liga/desliga. PulseBoost some
-// rapido (click pulse). HoleScale e ajustado por ctrl+scroll.
+// exponencial em direcao a 0/1 conforme Active liga/desliga. HoleScale e
+// ajustado por ctrl+scroll.
 public sealed class BlackHole
 {
   public BlackHoleMode Mode { get; private set; } = BlackHoleMode.Off;
   public float Time { get; private set; }
   public float Intensity { get; private set; }
-  public float PulseBoost { get; private set; }
 
   public bool Active => Mode != BlackHoleMode.Off;
   public bool Visible => Active || Intensity > 0.01f;
@@ -81,9 +79,6 @@ public sealed class BlackHole
     DiskInclOverride = Math.Clamp(current + d, 0f, MathF.PI / 2f);
   }
 
-  // Click pulse: empurra um boost que escala HoleScale por ~250ms.
-  public void Pulse() => PulseBoost = MathF.Min(1f, PulseBoost + 0.55f);
-
   public void Tick(float dt)
   {
     Time += dt;
@@ -91,10 +86,16 @@ public sealed class BlackHole
     float rate = Active ? 3.5f : 7f;
     Intensity += (target - Intensity) * MathF.Min(1f, rate * dt);
     if (!Active && Intensity < 0.001f) Intensity = 0f;
+  }
 
-    // pulse decai exponencial; ~250ms pra cair pra 1/e
-    PulseBoost *= MathF.Exp(-dt * 4f);
-    if (PulseBoost < 0.001f) PulseBoost = 0f;
+  // Centro do buraco em uv [0..1] de tela — mesmo Lissajous do shader.
+  // Usado pela fisica de mouse no passthrough pra saber onde puxar o cursor.
+  public System.Numerics.Vector2 ComputeHoleCenterUv()
+  {
+    float t = Time * Preset.DriftSpeed * 0.25f;
+    float x = 0.5f + 0.16f * (0.75f * MathF.Sin(t * 0.37f) + 0.25f * MathF.Sin(t * 0.83f + 1f));
+    float y = 0.5f + 0.18f * (0.70f * MathF.Sin(t * 0.54f + 2.1f) + 0.30f * MathF.Sin(t * 1.07f));
+    return new System.Numerics.Vector2(x, y);
   }
 }
 

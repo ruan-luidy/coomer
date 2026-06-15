@@ -39,6 +39,7 @@ public sealed class CoomerApp
   private nint _hwnd;
   private int _frames;
   private bool _shown;
+  private bool _stabilized;
 
   public CoomerApp(Config config, string configPath)
   {
@@ -124,8 +125,68 @@ public sealed class CoomerApp
     _ripple.Tick(dt);
     _blackHole.Tick(dt);
 
+    if (_blackHole.Passthrough)
+    {
+      // pet mode: gravidade puxa o cursor real do windows quando ele chega
+      // perto do buraco (opcao A do mouse-physics — fisica de massa de teste).
+      ApplyMouseGravity(dt);
+
+      // refresca a textura do screenshot a ~30Hz com BitBlt da tela viva
+      // (o overlay ta WDA_EXCLUDEFROMCAPTURE entao nao se grava). Atualiza
+      // em frames pares pra reduzir custo CPU/GPU em 4K.
+      if ((_frames & 1) == 0)
+      {
+        try
+        {
+          _screenshot.Refresh();
+          _renderer.UploadScreenshot();
+        }
+        catch { /* nao deixa o overlay morrer por uma falha de captura */ }
+      }
+    }
+
     if (_handler.Quitting)
       _window.Close();
+  }
+
+  // Newton-ish: pull ~1/r² em direcao ao centro, ate dist=5 raios. Sem
+  // teleporte ao entrar no horizonte — o cursor so e atraido, sem cuspida
+  // do outro lado.
+  private void ApplyMouseGravity(float dt)
+  {
+    if (!OverlayWindowNative.TryGetCursorPos(out int cx, out int cy)) return;
+
+    float W = _screenshot.Width;
+    float H = _screenshot.Height;
+    float monX = _screenshot.OriginX;
+    float monY = _screenshot.OriginY;
+
+    float cw_x = cx - monX;
+    float cw_y = cy - monY;
+
+    var uv = _blackHole.ComputeHoleCenterUv();
+    float hx = uv.X * W;
+    float hy = uv.Y * H;
+
+    float rh = 0.04f * H * _blackHole.HoleScale;
+
+    float dx = hx - cw_x;
+    float dy = hy - cw_y;
+    float r  = MathF.Sqrt(dx * dx + dy * dy);
+    if (r < 1e-3f) return;
+
+    // Fora da zona de influencia: nao mexe
+    if (r > 5f * rh) return;
+
+    float ux = dx / r;
+    float uy = dy / r;
+    float strength = (rh * rh) / (r * r);
+    float pull = strength * 700f * dt;
+    if (pull > r * 0.5f) pull = r * 0.5f;
+
+    int tx = (int)MathF.Round(cw_x + ux * pull + monX);
+    int ty = (int)MathF.Round(cw_y + uy * pull + monY);
+    OverlayWindowNative.MoveCursorTo(tx, ty);
   }
 
   private void OnRender(double delta)
@@ -135,6 +196,15 @@ public sealed class CoomerApp
       _window.IsVisible = true;
       OverlayWindowNative.SetForegroundWindow(_hwnd);
       _shown = true;
+    }
+    else if (_frames == 3 && !_stabilized)
+    {
+      // No frame 3 a janela ja foi mostrada e o desktop ja estabilizou
+      // (jogo em fullscreen exclusivo ja entregou o display de volta,
+      // mudanca de DPI ja propagou). Recaptura e ve se as dimensoes do
+      // monitor mudaram desde o snapshot inicial.
+      _stabilized = true;
+      TryStabilize();
     }
 
     var windowSize = new Vector2(_screenshot.Width, _screenshot.Height);
@@ -156,8 +226,40 @@ public sealed class CoomerApp
 
   private void ApplyViewport()
   {
-    int yOff = _window.FramebufferSize.Y - _screenshot.Height;
-    _gl.Viewport(0, yOff, (uint)_screenshot.Width, (uint)_screenshot.Height);
+    // Cobre o framebuffer inteiro sempre. Quando tudo da certo (DPI propagou,
+    // sem race com fullscreen exclusivo) framebuffer == screenshot+1 e a
+    // imagem renderiza 1:1; quando da errado (jogo saiu de exclusivo deixando
+    // a janela com dim antiga, ou GLFW nao honrou PerMonitorV2 e voltou
+    // framebuffer escalado) a imagem estica pra preencher tudo em vez de
+    // ficar num pedacinho pequeno no canto.
+    var fb = _window.FramebufferSize;
+    _gl.Viewport(0, 0, (uint)fb.X, (uint)fb.Y);
+  }
+
+  private void TryStabilize()
+  {
+    Screenshot fresh;
+    try { fresh = Screenshot.CaptureMonitorUnderCursor(); }
+    catch { return; }
+
+    if (fresh.Width == _screenshot.Width
+     && fresh.Height == _screenshot.Height
+     && fresh.OriginX == _screenshot.OriginX
+     && fresh.OriginY == _screenshot.OriginY)
+      return;
+
+    // Monitor mudou de dimensao desde a captura inicial — recria texture/quad
+    // com a nova resolucao e redimensiona a janela pro novo retangulo do
+    // monitor. Camera e estado de input ficam preservados.
+    var oldRenderer = _renderer;
+    _screenshot = fresh;
+    _renderer = new Renderer(_gl, _screenshot);
+    oldRenderer.Dispose();
+    _camera.ResizeImage(new Vector2(_screenshot.Width, _screenshot.Height));
+
+    _window.Size = new Vector2D<int>(_screenshot.Width, _screenshot.Height + 1);
+    _window.Position = new Vector2D<int>(_screenshot.OriginX, _screenshot.OriginY);
+    ApplyViewport();
   }
 
   private void OnClosing()
@@ -166,6 +268,7 @@ public sealed class CoomerApp
     // garante que o hook de teclado nao sobreviva ao fechamento do overlay
     OverlayWindowNative.UninstallEscapeHook();
     OverlayWindowNative.SetClickThrough(_hwnd, false);
+    OverlayWindowNative.SetExcludeFromCapture(_hwnd, false);
     _renderer?.Dispose();
     _stickers?.Dispose();
     _input?.Dispose();
@@ -175,6 +278,10 @@ public sealed class CoomerApp
   {
     bool passthrough = mode == BlackHoleMode.Passthrough;
     OverlayWindowNative.SetClickThrough(_hwnd, passthrough);
+    // exclui a janela das proprias capturas: a textura e atualizada por
+    // BitBlt da tela inteira no OnUpdate, e sem isso o overlay ficaria
+    // gravando a si mesmo (feedback loop visual).
+    OverlayWindowNative.SetExcludeFromCapture(_hwnd, passthrough);
 
     if (passthrough)
     {

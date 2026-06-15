@@ -17,16 +17,14 @@ public static class BlackHolePresets
 {
   public static readonly BlackHolePreset[] All =
   {
+    // padrao: inclinacao media, disco quente equilibrado, dilatacao moderada
     new("DEFAULT",   1.50f,  5500f, 0.60f, 2.2f, 2.5f, 1.0f, 0.20f),
-    // gargantua (Interstellar): face-on, disco quente brilhante, dilatacao forte
-    new("GARGANTUA", 0.30f,  6500f, 0.40f, 2.6f, 2.0f, 0.5f, 0.10f),
-    // quasar: edge-on, azul violento, beaming alto
-    new("QUASAR",    1.40f, 12000f, 0.90f, 3.0f, 3.5f, 1.2f, 0.15f),
-    // M87*: quase face-on, vermelho fraco, calmo (foto da EHT)
-    new("M87",       0.20f,  3500f, 0.50f, 1.6f, 1.8f, 0.3f, 0.30f),
-    // inferno: tudo no talo, deriva rapida
-    new("INFERNO",   1.20f,  9000f, 0.85f, 3.5f, 3.2f, 2.0f, 0.05f),
-    // zen: sutil, disco fraco, mal se mexe
-    new("ZEN",       1.05f,  4200f, 0.30f, 1.2f, 1.5f, 0.2f, 0.40f),
+    // blazar: quase edge-on, azul violento com beaming relativistico no talo
+    // (analogo terrestre: jato apontado quase pra camera)
+    new("BLAZAR",    1.45f, 15000f, 0.95f, 3.2f, 4.0f, 1.5f, 0.10f),
+    // pure lens: disco desligado (gain 0). So a sombra, o anel de fotons e a
+    // lente gravitacional do screenshot dobrando ao redor. Outros params do
+    // disco viram ruido — ficam em valores neutros.
+    new("PURE LENS", 1.20f,  5500f, 0.00f, 0.0f, 1.0f, 0.5f, 0.30f),
   };
 }

@@ -124,6 +124,8 @@ public sealed unsafe class Renderer : IDisposable
     // a flashlight (o handler ja desliga uma ao ligar a outra).
     if (blackHole.Visible)
     {
+      bool pet = blackHole.Passthrough;
+
       _blackHoleShader.Use();
       // o vert.glsl partilhado usa cameraPos/cameraScale/screenshotSize pra
       // mapear o quad em NDC — sem setar isso, gl_Position vira NaN e a tela
@@ -136,11 +138,9 @@ public sealed unsafe class Renderer : IDisposable
       _blackHoleShader.SetFloat("intensity", blackHole.Intensity);
       _blackHoleShader.SetInt("mirror", mirror ? 1 : 0);
 
-      // preset + interacao (drag, ctrl+scroll, [/], click pulse)
+      // preset + interacao (ctrl+scroll, [/], , preset)
       var preset = blackHole.Preset;
-      // pulse: PulseBoost 0..1 vira ate +35% no raio (inchada momentanea)
-      float scale = blackHole.HoleScale * (1f + blackHole.PulseBoost * 0.35f);
-      _blackHoleShader.SetFloat("uHoleScale", scale);
+      _blackHoleShader.SetFloat("uHoleScale", blackHole.HoleScale);
       _blackHoleShader.SetFloat("uDiskIncl", blackHole.EffectiveDiskIncl);
       _blackHoleShader.SetFloat("uDiskTemp", preset.DiskTemp);
       _blackHoleShader.SetFloat("uDopplerMix", preset.DopplerMix);
@@ -148,11 +148,20 @@ public sealed unsafe class Renderer : IDisposable
       _blackHoleShader.SetFloat("uDiskBeam", preset.DiskBeam);
       _blackHoleShader.SetFloat("uDriftSpeed", preset.DriftSpeed);
       _blackHoleShader.SetFloat("uDilationMin", preset.DilationMin);
-      // (-1,-1) faz o shader usar a Lissajous interna (drag foi removido)
+      // (-1,-1) faz o shader usar a Lissajous interna
       _blackHoleShader.SetVec2("uCenter", new Vector2(-1f, -1f));
 
       _gl.BindVertexArray(_vao);
       _gl.DrawElements(PrimitiveType.Triangles, 6, DrawElementsType.UnsignedInt, (void*)0);
+
+      if (pet)
+      {
+        // no pet a textura ta sendo atualizada por OnUpdate com a captura
+        // viva do desktop, entao o shader ja lensa a tela real. Pula
+        // stickers/strokes/palette (sem input no passthrough), mantem HUD.
+        _hud.Draw(windowSize, drawTool, picker, exporter!, stickerState, blackHole);
+        return;
+      }
 
       _stickerRenderer.DrawStamps(drawTool, camera, mirror, windowSize, _screenshot, cursor, stickers, stickerState, exporter, flashlight, _text, 0);
       _strokes.Draw(drawTool, camera, mirror, windowSize, _screenshot, cursor, history, exporter, 0);
@@ -205,6 +214,20 @@ public sealed unsafe class Renderer : IDisposable
     _strokes.Draw(drawTool, camera, mirror, windowSize, _screenshot, cursor, history, exporter, invertMode);
     _palette.Draw(windowSize, drawTool, stickers, stickerState);
     _hud.Draw(windowSize, drawTool, picker, exporter!, stickerState, blackHole);
+  }
+
+  // Sobe pixels novos pra textura sem re-criar nada (pet mode usa isso pra
+  // alimentar o shader com a desktop viva). Mantem dimensoes iguais.
+  public void UploadScreenshot()
+  {
+    _gl.ActiveTexture(TextureUnit.Texture0);
+    _gl.BindTexture(TextureTarget.Texture2D, _texture);
+    fixed (byte* data = _screenshot.Pixels)
+    {
+      _gl.TexSubImage2D(TextureTarget.Texture2D, 0, 0, 0,
+          (uint)_imageWidth, (uint)_imageHeight,
+          PixelFormat.Bgra, PixelType.UnsignedByte, data);
+    }
   }
 
   public void Dispose()

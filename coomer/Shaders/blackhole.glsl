@@ -46,7 +46,7 @@ uniform float uDriftSpeed;
 uniform float uDilationMin;
 
 // ---------------------------------------------------------------- tunables --
-const float HOLE_RADIUS   = 0.1100; // raio da sombra (fracao da altura) em intensidade plena
+const float HOLE_RADIUS   = 0.0400; // raio da sombra (fracao da altura) em intensidade plena
 const float LENS_DEPTH    = 13.0000; // distancia ate o plano "ceu" (screenshot), em r_s
 // geometria do disco (raios em r_s)
 const float DISK_INNER    = 1.8000; // borda interna (3 r_s = ISCO, ultima orbita estavel)
@@ -231,8 +231,10 @@ void main() {
         v += a * (0.5 * dt);
 
         // ---- cruzamento do disco fino: o raio perfurou o plano ----
+        // gain=0 (preset pure lens) desliga o disco inteiro: nem emite nem
+        // bloqueia o fundo, entao so resta sombra + lente gravitacional.
         float s = dot(x, n);
-        if (s * sPrev < 0.0 && trans > 0.02) {
+        if (uDiskGain > 1e-4 && s * sPrev < 0.0 && trans > 0.02) {
             float tc = sPrev / (sPrev - s);
             vec3  xc = mix(xPrev, x, tc);
             float rc = length(xc);

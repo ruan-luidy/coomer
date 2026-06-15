@@ -47,8 +47,8 @@ public sealed class HudRenderer
   {
     string mode = bh.Mode switch
     {
-      BlackHoleMode.Interactive => "INTERACT · ctrl+scroll resize · click pulsa · , preset · [/] incl",
-      BlackHoleMode.Passthrough => "PASSTHROUGH · use o PC · ESC pra voltar",
+      BlackHoleMode.Interactive => "INTERACT · ctrl+scroll resize · , preset · [/] incl",
+      BlackHoleMode.Passthrough => "PET · cursor pode ser puxado · ESC pra voltar",
       _ => "fechando…",
     };
     float deg = bh.EffectiveDiskIncl * 180f / MathF.PI;

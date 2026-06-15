@@ -346,14 +346,10 @@ public sealed class InputHandler
 
   private void OnMouseDown(IMouse mouse, MouseButton button)
   {
-    // blackhole interativo: click esquerdo so pulsa, sem drag (drag foi removido
-    // a pedido — nao ficou bom). Outros mouse-tools (flashlight/draw/picker)
-    // ja estao desligados quando o buraco ta ativo.
-    if (button == MouseButton.Left && _blackHole.Interactive)
-    {
-      _blackHole.Pulse();
-      return;
-    }
+    // blackhole interativo: clicks no overlay nao fazem nada (panning a camera
+    // por baixo nao tem efeito visivel — o shader cobre o quad todo). Consumir
+    // o evento aqui evita disparar o pan default la embaixo.
+    if (button == MouseButton.Left && _blackHole.Interactive) return;
 
     if (button == MouseButton.Left && _picker.IsEnabled)
     {
