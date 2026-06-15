@@ -96,6 +96,7 @@ Inside the overlay:
 | `r`                                | Reload configuration                         |
 | `m`                                | Mirror the image                             |
 | `f`                                | Toggle flashlight                            |
+| `g`                                | Toggle black hole (geodesic-traced gravitational lens over the screen) |
 | `c` or `p`                         | Color picker (click a pixel → hex on clipboard) |
 | `b`                                | Region copy: drag a rect, release to copy as bitmap |
 | `Ctrl+S`                           | Save the annotated screen as BMP in `Pictures/` |

@@ -19,7 +19,7 @@ public sealed class HudRenderer
   }
 
   public void Draw(Vector2 windowSize, DrawTool draw, ColorPicker picker,
-                   RegionExporter exporter, StickerState stickerState)
+                   RegionExporter exporter, StickerState stickerState, bool blackHole)
   {
     if (!Visible) return;
 
@@ -27,7 +27,8 @@ public sealed class HudRenderer
     var fg = new Vector4(0.95f, 0.95f, 0.95f, 0.95f);
     var bg = new Vector4(0f, 0f, 0f, 0.55f);
 
-    string? line = BuildLine(draw, picker, exporter, stickerState);
+    string? line = blackHole ? "BLACK HOLE · G pra fechar"
+                             : BuildLine(draw, picker, exporter, stickerState);
     if (line == null) return;
 
     var (w, h) = _text.Measure(line, size);

@@ -25,6 +25,7 @@ public sealed class InputHandler
   private readonly StickerCache _stickers;
   private readonly StickerState _stickerState;
   private readonly RippleEffect _ripple;
+  private readonly BlackHole _blackHole;
 
   private Mouse _mouse;
   private bool _ctrl;
@@ -42,12 +43,13 @@ public sealed class InputHandler
   public RegionExporter Exporter => _exporter;
   public StickerState StickerState => _stickerState;
   public RippleEffect Ripple => _ripple;
+  public BlackHole BlackHole => _blackHole;
 
   public InputHandler(IInputContext input, Camera camera, Flashlight flashlight,
                       Config config, Screenshot screenshot, string configPath,
                       float frameRate, ColorPicker picker, DrawTool draw,
                       RegionExporter exporter, StickerCache stickers, StickerState stickerState,
-                      RippleEffect ripple)
+                      RippleEffect ripple, BlackHole blackHole)
   {
     _camera = camera;
     _flashlight = flashlight;
@@ -61,6 +63,7 @@ public sealed class InputHandler
     _stickers = stickers;
     _stickerState = stickerState;
     _ripple = ripple;
+    _blackHole = blackHole;
 
     foreach (var keyboard in input.Keyboards)
     {
@@ -139,6 +142,16 @@ public sealed class InputHandler
       case Key.F:
         _flashlight.IsEnabled = !_flashlight.IsEnabled;
         if (_flashlight.IsEnabled) _draw.IsEnabled = false;
+        break;
+
+      case Key.G:
+        _blackHole.Toggle();
+        if (_blackHole.Active)
+        {
+          _flashlight.IsEnabled = false;
+          _draw.IsEnabled = false;
+          _picker.IsEnabled = false;
+        }
         break;
 
       case Key.C:

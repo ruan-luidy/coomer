@@ -16,6 +16,7 @@ public sealed unsafe class Renderer : IDisposable
 {
   private readonly GL _gl;
   private readonly Shader _shader;
+  private readonly Shader _blackHoleShader;
   private readonly uint _vao;
   private readonly uint _vbo;
   private readonly uint _ebo;
@@ -39,6 +40,12 @@ public sealed unsafe class Renderer : IDisposable
     _shader = new Shader(gl,
         EmbeddedShader.Load("vert.glsl"),
         EmbeddedShader.Load("frag.glsl"),
+        new[] { (0u, "aPos"), (1u, "aTexCoord") });
+
+    // mesmo vertex shader (quad da imagem); fragment troca pro lente do buraco
+    _blackHoleShader = new Shader(gl,
+        EmbeddedShader.Load("vert.glsl"),
+        EmbeddedShader.Load("blackhole.glsl"),
         new[] { (0u, "aPos"), (1u, "aTexCoord") });
 
     float w = _imageWidth;
@@ -88,6 +95,8 @@ public sealed unsafe class Renderer : IDisposable
 
     _shader.Use();
     _shader.SetInt("tex", 0);
+    _blackHoleShader.Use();
+    _blackHoleShader.SetInt("tex", 0);
 
     _strokes = new StrokeRenderer(gl);
     _stickerRenderer = new StickerRenderer(gl);
@@ -100,7 +109,7 @@ public sealed unsafe class Renderer : IDisposable
                    bool mirror, Vector2 windowSize, Vector2 cursor,
                    DrawTool drawTool, ColorHistory? history, RegionExporter? exporter,
                    StickerCache stickers, StickerState stickerState,
-                   ColorPicker picker, RippleEffect ripple)
+                   ColorPicker picker, RippleEffect ripple, BlackHole blackHole)
   {
     _text.NewFrame();
     _gl.ClearColor(0.1f, 0.1f, 0.1f, 1.0f);
@@ -108,6 +117,31 @@ public sealed unsafe class Renderer : IDisposable
 
     _gl.ActiveTexture(TextureUnit.Texture0);
     _gl.BindTexture(TextureTarget.Texture2D, _texture);
+
+    // black hole (tecla G): troca o passe base pela lente tracada por
+    // geodesica. Usa o mesmo vertex shader (quad da imagem), so muda o frag;
+    // strokes/stickers/HUD desenham por cima normal. Mutuamente exclusivo com
+    // a flashlight (o handler ja desliga uma ao ligar a outra).
+    if (blackHole.Visible)
+    {
+      _blackHoleShader.Use();
+      _blackHoleShader.SetVec2("cameraPos", camera.Position);
+      _blackHoleShader.SetFloat("cameraScale", camera.Scale);
+      _blackHoleShader.SetVec2("screenshotSize", new Vector2(_imageWidth, _imageHeight));
+      _blackHoleShader.SetVec2("windowSize", windowSize);
+      _blackHoleShader.SetFloat("iTime", blackHole.Time);
+      _blackHoleShader.SetFloat("intensity", blackHole.Intensity);
+      _blackHoleShader.SetInt("mirror", mirror ? 1 : 0);
+
+      _gl.BindVertexArray(_vao);
+      _gl.DrawElements(PrimitiveType.Triangles, 6, DrawElementsType.UnsignedInt, (void*)0);
+
+      _stickerRenderer.DrawStamps(drawTool, camera, mirror, windowSize, _screenshot, cursor, stickers, stickerState, exporter, flashlight, _text, 0);
+      _strokes.Draw(drawTool, camera, mirror, windowSize, _screenshot, cursor, history, exporter, 0);
+      _palette.Draw(windowSize, drawTool, stickers, stickerState);
+      _hud.Draw(windowSize, drawTool, picker, exporter!, stickerState, true);
+      return;
+    }
 
     _shader.Use();
     _shader.SetVec2("cameraPos", camera.Position);
@@ -152,7 +186,7 @@ public sealed unsafe class Renderer : IDisposable
     _stickerRenderer.DrawStamps(drawTool, camera, mirror, windowSize, _screenshot, cursor, stickers, stickerState, exporter, flashlight, _text, invertMode);
     _strokes.Draw(drawTool, camera, mirror, windowSize, _screenshot, cursor, history, exporter, invertMode);
     _palette.Draw(windowSize, drawTool, stickers, stickerState);
-    _hud.Draw(windowSize, drawTool, picker, exporter!, stickerState);
+    _hud.Draw(windowSize, drawTool, picker, exporter!, stickerState, false);
   }
 
   public void Dispose()
@@ -162,6 +196,7 @@ public sealed unsafe class Renderer : IDisposable
     _gl.DeleteBuffer(_ebo);
     _gl.DeleteTexture(_texture);
     _shader.Dispose();
+    _blackHoleShader.Dispose();
     _strokes.Dispose();
     _stickerRenderer.Dispose();
     _palette.Dispose();
