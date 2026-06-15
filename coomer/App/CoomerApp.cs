@@ -97,6 +97,7 @@ public sealed class CoomerApp
     _stickerState.RefreshFrom(_stickers);
     _ripple = new RippleEffect();
     _blackHole = new BlackHole();
+    _blackHole.ModeChanged += OnBlackHoleModeChanged;
 
     _renderer = new Renderer(_gl, _screenshot);
     _handler = new InputHandler(_input, _camera, _flashlight, _config, _screenshot,
@@ -162,8 +163,32 @@ public sealed class CoomerApp
   private void OnClosing()
   {
     _handler?.RestoreCursor();
+    // garante que o hook de teclado nao sobreviva ao fechamento do overlay
+    OverlayWindowNative.UninstallEscapeHook();
+    OverlayWindowNative.SetClickThrough(_hwnd, false);
     _renderer?.Dispose();
     _stickers?.Dispose();
     _input?.Dispose();
+  }
+
+  private void OnBlackHoleModeChanged(BlackHoleMode mode)
+  {
+    bool passthrough = mode == BlackHoleMode.Passthrough;
+    OverlayWindowNative.SetClickThrough(_hwnd, passthrough);
+
+    if (passthrough)
+    {
+      // ouve Esc global pra voltar pro interactive — o overlay perde foco
+      // assim que o usuario clica em outra coisa, entao o KeyUp local nao
+      // pegaria mais. Acao volta na thread do hook (a do overlay), entao
+      // mexer em _blackHole.ExitPassthrough() ali e seguro.
+      OverlayWindowNative.InstallEscapeHook(() => _blackHole.ExitPassthrough());
+      // mostra o cursor (provavelmente escondido pela flashlight do estado anterior)
+      _handler?.RestoreCursor();
+    }
+    else
+    {
+      OverlayWindowNative.UninstallEscapeHook();
+    }
   }
 }

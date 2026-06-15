@@ -125,6 +125,9 @@ public sealed unsafe class Renderer : IDisposable
     if (blackHole.Visible)
     {
       _blackHoleShader.Use();
+      // o vert.glsl partilhado usa cameraPos/cameraScale/screenshotSize pra
+      // mapear o quad em NDC — sem setar isso, gl_Position vira NaN e a tela
+      // fica preta. O fragment do blackhole ignora essas; sao puramente do vs.
       _blackHoleShader.SetVec2("cameraPos", camera.Position);
       _blackHoleShader.SetFloat("cameraScale", camera.Scale);
       _blackHoleShader.SetVec2("screenshotSize", new Vector2(_imageWidth, _imageHeight));
@@ -133,13 +136,28 @@ public sealed unsafe class Renderer : IDisposable
       _blackHoleShader.SetFloat("intensity", blackHole.Intensity);
       _blackHoleShader.SetInt("mirror", mirror ? 1 : 0);
 
+      // preset + interacao (drag, ctrl+scroll, [/], click pulse)
+      var preset = blackHole.Preset;
+      // pulse: PulseBoost 0..1 vira ate +35% no raio (inchada momentanea)
+      float scale = blackHole.HoleScale * (1f + blackHole.PulseBoost * 0.35f);
+      _blackHoleShader.SetFloat("uHoleScale", scale);
+      _blackHoleShader.SetFloat("uDiskIncl", blackHole.EffectiveDiskIncl);
+      _blackHoleShader.SetFloat("uDiskTemp", preset.DiskTemp);
+      _blackHoleShader.SetFloat("uDopplerMix", preset.DopplerMix);
+      _blackHoleShader.SetFloat("uDiskGain", preset.DiskGain);
+      _blackHoleShader.SetFloat("uDiskBeam", preset.DiskBeam);
+      _blackHoleShader.SetFloat("uDriftSpeed", preset.DriftSpeed);
+      _blackHoleShader.SetFloat("uDilationMin", preset.DilationMin);
+      // (-1,-1) faz o shader usar a Lissajous interna (drag foi removido)
+      _blackHoleShader.SetVec2("uCenter", new Vector2(-1f, -1f));
+
       _gl.BindVertexArray(_vao);
       _gl.DrawElements(PrimitiveType.Triangles, 6, DrawElementsType.UnsignedInt, (void*)0);
 
       _stickerRenderer.DrawStamps(drawTool, camera, mirror, windowSize, _screenshot, cursor, stickers, stickerState, exporter, flashlight, _text, 0);
       _strokes.Draw(drawTool, camera, mirror, windowSize, _screenshot, cursor, history, exporter, 0);
       _palette.Draw(windowSize, drawTool, stickers, stickerState);
-      _hud.Draw(windowSize, drawTool, picker, exporter!, stickerState, true);
+      _hud.Draw(windowSize, drawTool, picker, exporter!, stickerState, blackHole);
       return;
     }
 
@@ -186,7 +204,7 @@ public sealed unsafe class Renderer : IDisposable
     _stickerRenderer.DrawStamps(drawTool, camera, mirror, windowSize, _screenshot, cursor, stickers, stickerState, exporter, flashlight, _text, invertMode);
     _strokes.Draw(drawTool, camera, mirror, windowSize, _screenshot, cursor, history, exporter, invertMode);
     _palette.Draw(windowSize, drawTool, stickers, stickerState);
-    _hud.Draw(windowSize, drawTool, picker, exporter!, stickerState, false);
+    _hud.Draw(windowSize, drawTool, picker, exporter!, stickerState, blackHole);
   }
 
   public void Dispose()

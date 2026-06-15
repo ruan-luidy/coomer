@@ -4,6 +4,7 @@ using Coomer.Features.Lighting;
 using Coomer.Features.Capture;
 using Coomer.Features.Stickers;
 using Coomer.Features.Text;
+using Coomer.Features.Effects;
 
 namespace Coomer.Features.Hud;
 
@@ -19,7 +20,7 @@ public sealed class HudRenderer
   }
 
   public void Draw(Vector2 windowSize, DrawTool draw, ColorPicker picker,
-                   RegionExporter exporter, StickerState stickerState, bool blackHole)
+                   RegionExporter exporter, StickerState stickerState, BlackHole blackHole)
   {
     if (!Visible) return;
 
@@ -27,8 +28,8 @@ public sealed class HudRenderer
     var fg = new Vector4(0.95f, 0.95f, 0.95f, 0.95f);
     var bg = new Vector4(0f, 0f, 0f, 0.55f);
 
-    string? line = blackHole ? "BLACK HOLE · G pra fechar"
-                             : BuildLine(draw, picker, exporter, stickerState);
+    string? line = blackHole.Visible ? BuildBlackHoleLine(blackHole)
+                                     : BuildLine(draw, picker, exporter, stickerState);
     if (line == null) return;
 
     var (w, h) = _text.Measure(line, size);
@@ -40,6 +41,18 @@ public sealed class HudRenderer
       _text.Draw(line, size, pos + off, windowSize, bg);
 
     _text.Draw(line, size, pos, windowSize, fg);
+  }
+
+  private static string BuildBlackHoleLine(BlackHole bh)
+  {
+    string mode = bh.Mode switch
+    {
+      BlackHoleMode.Interactive => "INTERACT · ctrl+scroll resize · click pulsa · , preset · [/] incl",
+      BlackHoleMode.Passthrough => "PASSTHROUGH · use o PC · ESC pra voltar",
+      _ => "fechando…",
+    };
+    float deg = bh.EffectiveDiskIncl * 180f / MathF.PI;
+    return $"BLACK HOLE · {bh.Preset.Name} · {(int)deg}° · x{bh.HoleScale:0.0#} · {mode}";
   }
 
   private static string? BuildLine(DrawTool draw, ColorPicker picker,

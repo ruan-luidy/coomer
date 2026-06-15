@@ -1,7 +1,12 @@
 #version 130
-// black hole — Schwarzschild lens tracada por geodesica, portada do shader do
-// Ghostty (Eric Bruneton, https://ebruneton.github.io/black_hole_shader/) pro
-// coomer. Cada pixel integra a geodesica nula do foton numericamente:
+// black hole — Schwarzschild lens tracada por geodesica.
+//
+// Adaptado de github.com/s0xDk/ghostty-blackhole (MIT, (c) 2026 s13k),
+// inspirado por sua vez no shader de Eric Bruneton
+// (https://ebruneton.github.io/black_hole_shader/). Texto MIT completo em
+// THIRD_PARTY_LICENSES.md na raiz do repo.
+//
+// Cada pixel integra a geodesica nula do foton numericamente:
 //   a = -(3/2) h^2 x / r^5   (forma de Binet, reproduz a curvatura exata)
 // e tudo cai dessa integracao em vez de ser pintado:
 //   * a sombra            — raios com b < b_crit = (3sqrt3/2) r_s caem no horizonte
@@ -29,26 +34,30 @@ uniform float iTime;
 uniform float intensity; // 0..1 — mestre (cresce ao ligar)
 uniform bool mirror;
 
+// ----------------- uniforms vindos da CPU (preset + interacao) -------------
+uniform float uHoleScale;   // multiplica HOLE_RADIUS (ctrl+scroll); inclui pulse
+uniform vec2  uCenter;      // override do centro em [0,1]; (-1,-1) = use Lissajous
+uniform float uDiskIncl;    // rad, vem do preset (ou [/]/]/ override)
+uniform float uDiskTemp;    // K
+uniform float uDopplerMix;  // 0..1
+uniform float uDiskGain;
+uniform float uDiskBeam;
+uniform float uDriftSpeed;
+uniform float uDilationMin;
+
 // ---------------------------------------------------------------- tunables --
 const float HOLE_RADIUS   = 0.1100; // raio da sombra (fracao da altura) em intensidade plena
 const float LENS_DEPTH    = 13.0000; // distancia ate o plano "ceu" (screenshot), em r_s
 // geometria do disco (raios em r_s)
 const float DISK_INNER    = 1.8000; // borda interna (3 r_s = ISCO, ultima orbita estavel)
 const float DISK_OUTER    = 8.0000; // borda externa
-const float DISK_INCL     = 1.5000; // inclinacao, rad: 0 = de frente, 1.57 = de lado
 const float DISK_ROLL     = 0.3500; // rotacao do sistema no plano da tela, rad
 // materia & luz do disco
-const float DISK_GAIN     = 2.2000; // brilho de emissao do disco
 const float DISK_OPACITY  = 0.9000; // quanto o disco proximo esconde o que ta atras (0..1)
-const float DISK_TEMP     = 5500.0000; // temperatura do anel mais quente, Kelvin (cor blackbody)
-const float DOPPLER_MIX   = 0.6000; // 0 = sem assimetria relativistica, 1 = efeito total
-const float DISK_BEAM     = 2.5000; // expoente de beaming: intensidade ~ g^N
 const float DISK_SPEED    = 5.0000; // velocidade do padrao de streaks; negativo inverte a orbita
 const float DISK_WIND     = 7.0000; // aperto do espiralamento das streaks
 const float DISK_CONTRAST = 1.6000; // contraste das streaks: 0 = nevoa lisa, maior = filamentos
 const float EXPOSURE      = 1.4000; // exposicao do tonemap da luz do disco
-const float DRIFT_SPEED   = 1.0000; // velocidade da deriva do buraco pela tela
-const float DILATION_MIN  = 0.2000; // taxa do tempo do disco em intensidade plena (dilatacao)
 
 // passos da integracao da geodesica por pixel (so pixels perto do buraco pagam)
 #define N_STEPS 48
@@ -114,7 +123,7 @@ void main() {
     vec2  uv     = texcoord;
     float aspect = res.x / res.y;
 
-    float t = iTime * DRIFT_SPEED;
+    float t = iTime * uDriftSpeed;
 
     // ---- driver: intensidade mestre I, tamanho sz e centro de deriva ----
     // intensity (0..1) vem da CPU: cresce ao ligar a tecla G e cai ao desligar.
@@ -126,12 +135,15 @@ void main() {
     float sz = mix(0.35, 1.0, lvl);  // sombra cresce de pequena pra cheia
 
     // deriva preguicosa pela tela, confinada pra ficar sempre visivel
-    vec2 center = vec2(0.5, 0.5) + lissa(t * 0.25) * vec2(0.16, 0.18);
+    // (a CPU pode sobrescrever via uCenter — drag do mouse no modo interactive)
+    vec2 center = (uCenter.x >= 0.0)
+        ? uCenter
+        : vec2(0.5, 0.5) + lissa(t * 0.25) * vec2(0.16, 0.18);
 
-    float rh = HOLE_RADIUS * sz;     // raio da sombra em unidades de tela
+    float rh = HOLE_RADIUS * sz * uHoleScale; // raio em unidades de tela
 
     // dilatacao temporal gravitacional: buraco mais pesado desacelera o disco
-    float dil = mix(1.0, DILATION_MIN, I);
+    float dil = mix(1.0, uDilationMin, I);
 
     // o deslocamento (nao a cor) some longe do buraco, pra nao tremer a tela
     // toda enquanto ele deriva — entao nao ha costura visivel
@@ -188,8 +200,8 @@ void main() {
     vec3  v  = vec3(0.0, 0.0, -1.0);
     float h2 = dot(pr, pr);
 
-    // plano do disco: normal inclinada DISK_INCL no eixo x da tela
-    float ci = cos(DISK_INCL), si = sin(DISK_INCL);
+    // plano do disco: normal inclinada uDiskIncl no eixo x da tela
+    float ci = cos(uDiskIncl), si = sin(uDiskIncl);
     vec3  n  = vec3(0.0, si, ci);
     vec3  e2 = vec3(0.0, ci, -si);   // eixo no plano completando (x, e2, n)
     float sdir = DISK_SPEED < 0.0 ? -1.0 : 1.0;
@@ -244,16 +256,16 @@ void main() {
                 vec3  gasdir = normalize(cross(n, xc)) * sdir;
                 float beta   = clamp(inversesqrt(max(2.0 * (rc - 1.0), 0.2)), 0.0, 0.99);
                 float g      = gloc / max(1.0 + beta * dot(gasdir, normalize(v)), 0.05);
-                g = mix(1.0, g, DOPPLER_MIX);
+                g = mix(1.0, g, uDopplerMix);
 
                 // perfil de temperatura Shakura-Sunyaev, pico normalizado em 1
                 float xpr   = max(1.0 - sqrt(rin / rc), 0.0);
                 float tprof = pow(rin / rc, 0.75) * pow(xpr, 0.25) / 0.488;
-                vec3  cbb   = blackbody(DISK_TEMP * tprof * g); // cor com doppler
-                float boost = pow(g, DISK_BEAM);                // beaming
+                vec3  cbb   = blackbody(uDiskTemp * tprof * g); // cor com doppler
+                float boost = pow(g, uDiskBeam);                // beaming
 
                 float density = band * streaks;
-                emitc += trans * cbb * (DISK_GAIN * 2.2 * density * tprof * tprof * boost);
+                emitc += trans * cbb * (uDiskGain * 2.2 * density * tprof * tprof * boost);
                 trans *= 1.0 - clamp(DISK_OPACITY * density, 0.0, 1.0);
             }
         }

@@ -145,7 +145,7 @@ public sealed class InputHandler
         break;
 
       case Key.G:
-        _blackHole.Toggle();
+        _blackHole.Cycle();
         if (_blackHole.Active)
         {
           _flashlight.IsEnabled = false;
@@ -180,17 +180,20 @@ public sealed class InputHandler
         if (_draw.IsEnabled) _draw.Clear();
         break;
       case Key.LeftBracket:
-        if (_draw.IsEnabled && _draw.TextMode) _draw.TextFontSizeDelta(-2);
+        if (_blackHole.Interactive) _blackHole.DiskInclDelta(-MathF.PI / 36f); // -5°
+        else if (_draw.IsEnabled && _draw.TextMode) _draw.TextFontSizeDelta(-2);
         else if (_draw.IsEnabled && _draw.StickerMode) _draw.StickerSizeDelta(-8f);
         else if (_draw.IsEnabled) _draw.ThicknessDelta(-1f);
         break;
       case Key.RightBracket:
-        if (_draw.IsEnabled && _draw.TextMode) _draw.TextFontSizeDelta(+2);
+        if (_blackHole.Interactive) _blackHole.DiskInclDelta(+MathF.PI / 36f);
+        else if (_draw.IsEnabled && _draw.TextMode) _draw.TextFontSizeDelta(+2);
         else if (_draw.IsEnabled && _draw.StickerMode) _draw.StickerSizeDelta(+8f);
         else if (_draw.IsEnabled) _draw.ThicknessDelta(+1f);
         break;
       case Key.Comma:
-        if (_draw.IsEnabled) _draw.CycleColor();
+        if (_blackHole.Interactive) _blackHole.CyclePreset(_shift ? -1 : +1);
+        else if (_draw.IsEnabled) _draw.CycleColor();
         break;
       case Key.V:
         if (_draw.IsEnabled) _draw.Hide = !_draw.Hide;
@@ -343,6 +346,15 @@ public sealed class InputHandler
 
   private void OnMouseDown(IMouse mouse, MouseButton button)
   {
+    // blackhole interativo: click esquerdo so pulsa, sem drag (drag foi removido
+    // a pedido — nao ficou bom). Outros mouse-tools (flashlight/draw/picker)
+    // ja estao desligados quando o buraco ta ativo.
+    if (button == MouseButton.Left && _blackHole.Interactive)
+    {
+      _blackHole.Pulse();
+      return;
+    }
+
     if (button == MouseButton.Left && _picker.IsEnabled)
     {
       string hex = _picker.PickAt(_mouse.Current, _camera, _screenshot,
@@ -451,6 +463,9 @@ public sealed class InputHandler
 
   private void ScrollUp()
   {
+    // blackhole: so ctrl+scroll redimensiona (consistente com flashlight);
+    // scroll puro continua valendo o zoom normal da camera.
+    if (_ctrl && _blackHole.Interactive) { _blackHole.ScaleDelta(+0.15f); return; }
     if (_draw.IsEnabled && _draw.StickerMode && _draw.SelectedStickerIndex >= 0) { _draw.ResizeSelected(+16f); return; }
     if (_ctrl && _flashlight.IsEnabled) { _flashlight.DeltaRadius += Flashlight.InitialDeltaRadius; }
     else if (_ctrl && _draw.IsEnabled && _draw.StickerMode) { _draw.StickerSizeDelta(+16f); }
@@ -464,6 +479,7 @@ public sealed class InputHandler
 
   private void ScrollDown()
   {
+    if (_ctrl && _blackHole.Interactive) { _blackHole.ScaleDelta(-0.15f); return; }
     if (_draw.IsEnabled && _draw.StickerMode && _draw.SelectedStickerIndex >= 0) { _draw.ResizeSelected(-16f); return; }
     if (_ctrl && _flashlight.IsEnabled) { _flashlight.DeltaRadius -= Flashlight.InitialDeltaRadius; }
     else if (_ctrl && _draw.IsEnabled && _draw.StickerMode) { _draw.StickerSizeDelta(-16f); }
