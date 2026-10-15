@@ -103,6 +103,7 @@ public sealed class CoomerApp
 
     if (_window.Native?.Win32 is { } win32)
       _hwnd = win32.Hwnd;
+    Clipboard.Owner = _hwnd;
     OverlayWindowNative.HideFromTaskbar(_hwnd);
     ApplyViewport();
   }

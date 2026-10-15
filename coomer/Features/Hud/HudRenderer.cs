@@ -44,6 +44,7 @@ public sealed class HudRenderer
   private static string? BuildLine(DrawTool draw, ColorPicker picker,
                                    RegionExporter exporter, StickerState stickerState)
   {
+    if (exporter.LastStatus is { } status) return status;
     if (exporter.Active) return "REGION COPY · arrasta pra selecionar";
     if (picker.IsEnabled) return picker.LastHex.Length > 0 ? $"PICK · ultimo: {picker.LastHex}" : "PICK · click num pixel";
     if (!draw.IsEnabled) return null;

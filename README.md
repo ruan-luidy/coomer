@@ -98,7 +98,7 @@ Inside the overlay:
 | `f`                                | Toggle flashlight                            |
 | `c` or `p`                         | Color picker (click a pixel → hex on clipboard) |
 | `b`                                | Region copy: drag a rect, release to copy as bitmap |
-| `Ctrl+S`                           | Save the annotated screen as BMP in `Pictures/` |
+| `Ctrl+S`                           | Save the annotated screen as PNG in `Pictures/` |
 | Drag left mouse                    | Pan                                          |
 | Scroll or `=` / `-`                | Zoom                                         |
 | `Ctrl` + scroll                    | Flashlight radius or pen thickness           |

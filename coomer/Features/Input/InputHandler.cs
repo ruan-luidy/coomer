@@ -378,7 +378,7 @@ public sealed class InputHandler
                                    new Vector2(_screenshot.Width, _screenshot.Height));
       _picker.LastHex = hex;
       _picker.IsEnabled = false;
-      TryCopyToClipboard(hex);
+      _exporter.SetStatus(Clipboard.SetText(hex) ? $"{hex} copiado" : "clipboard falhou");
       return;
     }
 
@@ -515,26 +515,5 @@ public sealed class InputHandler
     var p = world + _camera.Position + new Vector2(_screenshot.Width, _screenshot.Height) * 0.5f;
     if (Mirror) p.X = _screenshot.Width - p.X;
     return p;
-  }
-
-  private static void TryCopyToClipboard(string text)
-  {
-    try
-    {
-      var psi = new System.Diagnostics.ProcessStartInfo("cmd.exe", "/c clip")
-      {
-        RedirectStandardInput = true,
-        UseShellExecute = false,
-        CreateNoWindow = true,
-      };
-      using var p = System.Diagnostics.Process.Start(psi);
-      if (p != null)
-      {
-        p.StandardInput.Write(text);
-        p.StandardInput.Close();
-        p.WaitForExit(500);
-      }
-    }
-    catch { }
   }
 }
