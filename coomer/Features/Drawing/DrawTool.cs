@@ -43,6 +43,8 @@ public sealed class DrawTool
   public TextStamp? ActiveText;
 
   private Stroke? _active;
+  private readonly Stack<Edit> _undo = new();
+  private readonly Stack<Edit> _redo = new();
   private readonly OneEuroFilterV2 _filter = new();
   private readonly Stopwatch _watch = new();
 
@@ -91,14 +93,40 @@ public sealed class DrawTool
     }
   }
 
-  public void End() => _active = null;
+  public void End()
+  {
+    if (_active == null) return;
+    // clique sem arrastar em forma de 2 pontos (ou seta sem corpo) nao desenha
+    // nada visivel — descarta pra nao gastar um undo num traco invisivel.
+    if (IsDegenerate(_active)) Strokes.Remove(_active);
+    else Record(new Edit(Strokes, _active, Strokes.Count - 1, Added: true));
+    _active = null;
+  }
+
+  private static bool IsDegenerate(Stroke s)
+  {
+    const float minLen = 2f;
+    return s.Shape switch
+    {
+      DrawShape.Free or DrawShape.Highlighter => s.Points.Count == 0,
+      DrawShape.Arrow => PathLength(s.Points) < minLen,
+      _ => s.Points.Count < 2 || Vector2.Distance(s.Points[0], s.Points[1]) < minLen,
+    };
+  }
+
+  private static float PathLength(List<Vector2> pts)
+  {
+    float len = 0f;
+    for (int i = 1; i < pts.Count; i++) len += Vector2.Distance(pts[i - 1], pts[i]);
+    return len;
+  }
 
   /// <summary>Solta um stamp numerado no cursor (em modo StampMode).</summary>
   public void DropStamp(Vector2 cursorScreen, Vector2 windowSize, Screenshot shot,
                         Camera camera, bool mirror)
   {
     var p = ScreenToImage(cursorScreen, windowSize, shot, camera, mirror);
-    Stamps.Add(new Stamp
+    Add(Stamps, new Stamp
     {
       Center = p,
       Number = NextStampNumber++,
@@ -109,46 +137,92 @@ public sealed class DrawTool
     });
   }
 
+  // Historico unico pra todo tipo de anotacao (traco, stamp, sticker, texto):
+  // z desfaz o que foi feito por ultimo independente do modo ativo, Shift+z
+  // refaz. Clear e delete de sticker tambem entram, entao nada e irreversivel.
   public void Undo()
   {
-    // desfaz a coisa mais recente: se o ultimo stamp e mais novo que o ultimo
-    // traco, desfaz stamp; senao desfaz traco. Como nao temos timestamp,
-    // priorizamos remover de quem foi adicionado por ultimo — heuristica:
-    // se ha stamp e stampMode, desfaz stamp; senao traco. Pratico o bastante.
-    if (TextMode && TextStamps.Count > 0) { TextStamps.RemoveAt(TextStamps.Count - 1); return; }
-    if (StickerMode && StickerStamps.Count > 0) { StickerStamps.RemoveAt(StickerStamps.Count - 1); return; }
-    if (StampMode && Stamps.Count > 0)
+    if (_active != null)
     {
-      Stamps.RemoveAt(Stamps.Count - 1);
-      if (NextStampNumber > 1) NextStampNumber--;
-      return;
-    }
-    if (Strokes.Count > 0)
-    {
-      Strokes.RemoveAt(Strokes.Count - 1);
+      // z no meio do arrasto cancela o traco em andamento
+      Strokes.Remove(_active);
       _active = null;
       return;
     }
-    if (StickerStamps.Count > 0) { StickerStamps.RemoveAt(StickerStamps.Count - 1); return; }
-    if (Stamps.Count > 0)
-    {
-      Stamps.RemoveAt(Stamps.Count - 1);
-      if (NextStampNumber > 1) NextStampNumber--;
-    }
+    if (!_undo.TryPop(out var e)) return;
+    Apply(e, forward: false);
+    _redo.Push(e);
+  }
+
+  public void Redo()
+  {
+    if (_active != null || !_redo.TryPop(out var e)) return;
+    Apply(e, forward: true);
+    _undo.Push(e);
   }
 
   public void Clear()
+  {
+    CommitActiveText();
+    DeselectSticker();
+    _active = null;
+    if (Strokes.Count + Stamps.Count + StickerStamps.Count + TextStamps.Count == 0) return;
+    var snap = new Snapshot(Strokes.ToArray(), Stamps.ToArray(), StickerStamps.ToArray(),
+                            TextStamps.ToArray(), NextStampNumber);
+    ClearAll();
+    Record(new Edit(null, null, 0, Added: false, Cleared: snap));
+  }
+
+  private void ClearAll()
   {
     Strokes.Clear();
     Stamps.Clear();
     StickerStamps.Clear();
     TextStamps.Clear();
-    ActiveText = null;
     NextStampNumber = 1;
-    _active = null;
-    SelectedStickerIndex = -1;
-    DraggingSticker = false;
   }
+
+  private void Add<T>(List<T> list, T item)
+  {
+    list.Add(item);
+    Record(new Edit(list, item, list.Count - 1, Added: true));
+  }
+
+  private void Record(Edit e)
+  {
+    _undo.Push(e);
+    _redo.Clear();
+  }
+
+  private void Apply(Edit e, bool forward)
+  {
+    DeselectSticker();
+    if (e.Cleared is { } snap)
+    {
+      if (forward) { ClearAll(); return; }
+      Strokes.AddRange(snap.Strokes);
+      Stamps.AddRange(snap.Stamps);
+      StickerStamps.AddRange(snap.Stickers);
+      TextStamps.AddRange(snap.Texts);
+      NextStampNumber = snap.NextStampNumber;
+      return;
+    }
+
+    // forward refaz a edicao original; backward desfaz. Add e remove sao
+    // espelhos: desfazer um add = remover, desfazer um remove = reinserir.
+    bool insert = forward == e.Added;
+    if (insert) e.List!.Insert(e.Index, e.Item);
+    else e.List!.RemoveAt(e.Index);
+
+    if (e.Item is Stamp st)
+      NextStampNumber = insert ? st.Number + 1 : st.Number;
+  }
+
+  private sealed record Edit(System.Collections.IList? List, object? Item, int Index,
+                             bool Added, Snapshot? Cleared = null);
+
+  private sealed record Snapshot(Stroke[] Strokes, Stamp[] Stamps, StickerStamp[] Stickers,
+                                 TextStamp[] Texts, int NextStampNumber);
 
   public int HitTestSticker(Vector2 cursorImg, StickerCache cache)
   {
@@ -212,7 +286,9 @@ public sealed class DrawTool
   public void DeleteSelected()
   {
     if (SelectedStickerIndex < 0 || SelectedStickerIndex >= StickerStamps.Count) return;
+    var removed = StickerStamps[SelectedStickerIndex];
     StickerStamps.RemoveAt(SelectedStickerIndex);
+    Record(new Edit(StickerStamps, removed, SelectedStickerIndex, Added: false));
     SelectedStickerIndex = -1;
     DraggingSticker = false;
   }
@@ -239,7 +315,7 @@ public sealed class DrawTool
   public void CommitActiveText()
   {
     if (ActiveText == null) return;
-    if (!string.IsNullOrEmpty(ActiveText.Text)) TextStamps.Add(ActiveText);
+    if (!string.IsNullOrEmpty(ActiveText.Text)) Add(TextStamps, ActiveText);
     ActiveText = null;
   }
 
@@ -251,7 +327,7 @@ public sealed class DrawTool
                           Camera camera, bool mirror, string stickerPath)
   {
     var p = ScreenToImage(cursorScreen, windowSize, shot, camera, mirror);
-    StickerStamps.Add(new StickerStamp { Center = p, Path = stickerPath, HalfSize = StickerSize * 0.5f, MirrorH = StickerMirror });
+    Add(StickerStamps, new StickerStamp { Center = p, Path = stickerPath, HalfSize = StickerSize * 0.5f, MirrorH = StickerMirror });
   }
 
   public void StickerSizeDelta(float d)

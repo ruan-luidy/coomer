@@ -116,8 +116,9 @@ image and stay above the flashlight shadow.
 | Hold `Shift` while drag  | Snap line to 45°, force square / perfect circle                |
 | `t`                      | Toggle stamp mode (click drops a numbered badge)               |
 | `v`                      | Hide / show strokes + stamps (brush ring stays)                |
-| `z`                      | Undo last stroke / stamp                                       |
-| `x`                      | Clear everything                                               |
+| `z`                      | Undo (strokes, stamps, stickers, text — whatever came last)    |
+| `Shift+z` / `Ctrl+y`     | Redo                                                           |
+| `x`                      | Clear everything (undoable)                                    |
 | `[` / `]`                | Pen thickness − / +                                            |
 | `,`                      | Cycle pen color (also Ctrl + scroll for thickness)             |
 

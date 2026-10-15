@@ -156,7 +156,12 @@ public sealed class InputHandler
         else if (_draw.IsEnabled) _draw.CycleShape();
         break;
       case Key.Z:
-        if (_draw.IsEnabled) _draw.Undo();
+        // funciona fora do draw mode tambem: as anotacoes continuam na tela
+        if (_shift) _draw.Redo();
+        else _draw.Undo();
+        break;
+      case Key.Y when _ctrl:
+        _draw.Redo();
         break;
       case Key.X:
         if (_draw.IsEnabled) _draw.Clear();
