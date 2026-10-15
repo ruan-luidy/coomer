@@ -59,6 +59,8 @@ public sealed class CoomerApp
       TopMost = true,
       VSync = true,
       IsVisible = false,
+      // canal alpha no framebuffer: o marca-texto acumula cobertura nele
+      PreferredBitDepth = new Vector4D<int>(8, 8, 8, 8),
     };
 
     _window = Window.Create(options);

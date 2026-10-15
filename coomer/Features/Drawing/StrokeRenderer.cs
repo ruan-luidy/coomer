@@ -24,6 +24,8 @@ public sealed unsafe class StrokeRenderer : IDisposable
   private readonly uint _vbo;
   private uint _capacity;
   private readonly List<float> _verts = new();
+  // framebuffer com canal alpha: o marca-texto usa ele de acumulador
+  private readonly bool _dstAlpha;
 
   public StrokeRenderer(GL gl)
   {
@@ -53,6 +55,10 @@ public sealed unsafe class StrokeRenderer : IDisposable
     gl.EnableVertexAttribArray(2);
     gl.VertexAttribPointer(3, 1, VertexAttribPointerType.Float, false, Stride, (void*)(6 * sizeof(float)));
     gl.EnableVertexAttribArray(3);
+
+    gl.GetFramebufferAttachmentParameter(FramebufferTarget.Framebuffer, GLEnum.BackLeft,
+        FramebufferAttachmentParameterName.AlphaSize, out int alphaBits);
+    _dstAlpha = gl.GetError() == GLEnum.NoError && alphaBits >= 8;
   }
 
   public void Draw(DrawTool tool, Camera camera, bool mirror, Vector2 windowSize,
@@ -101,7 +107,11 @@ public sealed unsafe class StrokeRenderer : IDisposable
         BuildStroke(s, _verts);
         if (_verts.Count == 0) continue;
         var col = s.Color;
-        if (s.Shape == DrawShape.Highlighter) col.W *= 0.4f;
+        if (s.Shape == DrawShape.Highlighter)
+        {
+          col.W *= HighlighterAlpha;
+          if (_dstAlpha) { DrawHighlighter(col, windowSize); continue; }
+        }
         UploadAndDraw(_verts, col);
       }
     }
@@ -140,6 +150,35 @@ public sealed unsafe class StrokeRenderer : IDisposable
 
     _shader.SetInt("uScreenSpace", 0);
     _gl.Disable(EnableCap.Blend);
+  }
+
+  private const float HighlighterAlpha = 0.4f;
+
+  // Cada sub-segmento do traco e uma capsula propria, entao com blend normal
+  // a sobreposicao somava alpha e o marca-texto de 40% saia quase opaco.
+  // Aqui a cobertura acumula por MAX no alpha do framebuffer (cada pixel fica
+  // com a maior cobertura, nao a soma) e um quad de tela inteira pinta a cor
+  // uma vez so, ponderada por esse alpha. No fim o alpha volta pra 1.
+  private void DrawHighlighter(Vector4 color, Vector2 windowSize)
+  {
+    _gl.ColorMask(false, false, false, true);
+    _gl.ClearColor(0f, 0f, 0f, 0f);
+    _gl.Clear((uint)ClearBufferMask.ColorBufferBit);
+    _gl.BlendEquationSeparate(BlendEquationModeEXT.FuncAdd, BlendEquationModeEXT.Max);
+    UploadAndDraw(_verts, color);
+
+    _gl.ColorMask(true, true, true, true);
+    _gl.BlendEquation(BlendEquationModeEXT.FuncAdd);
+    _gl.BlendFuncSeparate(BlendingFactor.DstAlpha, BlendingFactor.OneMinusDstAlpha,
+                          BlendingFactor.One, BlendingFactor.Zero);
+    _shader.SetInt("uScreenSpace", 1);
+    _verts.Clear();
+    var center = windowSize * 0.5f;
+    EmitSeg(center, center, windowSize.Length(), _verts);
+    UploadAndDraw(_verts, new Vector4(color.X, color.Y, color.Z, 1f));
+
+    _shader.SetInt("uScreenSpace", 0);
+    _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
   }
 
   private void DrawColorSwatches(ColorHistory history, Vector2 windowSize)
