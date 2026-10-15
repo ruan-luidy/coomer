@@ -129,9 +129,6 @@ Picked colors stack as swatches in the bottom-right (last 8, LRU).
   arrowhead lands at the end pointing along your final stroke direction.
 - **Circle** drag is an axis-aligned ellipse inscribed in the bbox. Hold
   `Shift` to lock it to a perfect circle.
-- **Free → auto-shape**: finish a rough closed scribble and it gets recognized
-  as a circle or ellipse (any orientation) and replaced by the clean version.
-  Fit is by PCA of the points; you can disable with `DrawTool.AutoCircle = false`.
 
 ## Configuration
 

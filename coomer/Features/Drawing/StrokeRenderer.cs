@@ -228,15 +228,8 @@ public sealed unsafe class StrokeRenderer : IDisposable
         break;
 
       case DrawShape.Circle:
-        // 3 pontos = elipse via PCA. 2 pontos = bbox -> elipse axis-aligned.
-        if (s.Points.Count >= 3)
-        {
-          var center = s.Points[0];
-          var axA = s.Points[1] - center;
-          var axB = s.Points[2] - center;
-          EmitEllipse(center, axA, axB, h, verts);
-        }
-        else if (s.Points.Count >= 2)
+        // 2 pontos = bbox -> elipse axis-aligned inscrita.
+        if (s.Points.Count >= 2)
         {
           var a = s.Points[0];
           var b = s.Points[1];
