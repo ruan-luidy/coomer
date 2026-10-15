@@ -97,6 +97,15 @@ public sealed class InputHandler
 
   private void OnKeyDown(IKeyboard keyboard, Key key, int scancode)
   {
+    // digitando texto: letra vira caractere (OnKeyChar), nao atalho — senao
+    // escrever "xis" apagava tudo e "w" cancelava o proprio texto. Esc sai
+    // pelo KeyUp como sempre.
+    if (_draw.TextMode && _draw.ActiveText != null)
+    {
+      HandleTypingKey(key);
+      return;
+    }
+
     switch (key)
     {
       case Key.ControlLeft:
@@ -273,6 +282,31 @@ public sealed class InputHandler
 
       case Key.Minus:
         ScrollDown();
+        break;
+    }
+  }
+
+  private void HandleTypingKey(Key key)
+  {
+    switch (key)
+    {
+      case Key.ControlLeft:
+      case Key.ControlRight:
+        _ctrl = true;
+        break;
+      case Key.ShiftLeft:
+      case Key.ShiftRight:
+        _shift = true;
+        break;
+      case Key.Enter:
+        _draw.CommitActiveText();
+        break;
+      case Key.Backspace:
+        _draw.TypeChar('');
+        break;
+      case Key.S when _ctrl:
+        _draw.CommitActiveText();
+        _exporter.RequestSaveFull();
         break;
     }
   }
