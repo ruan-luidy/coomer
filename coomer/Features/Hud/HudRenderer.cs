@@ -18,27 +18,68 @@ public sealed class HudRenderer
     _text = text;
   }
 
+  private const int Size = 14;
+  private static readonly Vector4 Fg = new(0.95f, 0.95f, 0.95f, 0.95f);
+  private static readonly Vector4 Bg = new(0f, 0f, 0f, 0.55f);
+  private static readonly Vector2[] Halo =
+  {
+    new(-1, 0), new(1, 0), new(0, -1), new(0, 1),
+    new(-1, -1), new(1, 1), new(1, -1), new(-1, 1),
+  };
+
+  // Iosevka e mono, entao alinhar por espaco ja da colunas certas.
+  private static readonly string[] HelpLines =
+  {
+    "ATALHOS · F1 fecha",
+    "",
+    "scroll  = -     zoom          arrastar   mover",
+    "0               reset         m          espelhar",
+    "f               lanterna      ctrl+scroll raio / espessura",
+    "c               conta-gotas   b          copiar regiao",
+    "ctrl+s          salvar PNG    r          recarregar config",
+    "",
+    "d               desenhar      s          trocar forma",
+    ",               cor           [ ]        espessura",
+    "shift           45° / quadrado / circulo perfeito",
+    "z               desfazer      shift+z    refazer",
+    "x               limpar        v          esconder",
+    "t               stamp #       w          texto",
+    "y               stickers      espaco     mover no draw",
+    "",
+    "esc  q          fechar (coomer continua rodando)",
+  };
+
   public void Draw(Vector2 windowSize, DrawTool draw, ColorPicker picker,
-                   RegionExporter exporter, StickerState stickerState)
+                   RegionExporter exporter, StickerState stickerState, bool showHelp)
   {
     if (!Visible) return;
 
-    const int size = 14;
-    var fg = new Vector4(0.95f, 0.95f, 0.95f, 0.95f);
-    var bg = new Vector4(0f, 0f, 0f, 0.55f);
+    if (showHelp) DrawHelp(windowSize);
 
     string? line = BuildLine(draw, picker, exporter, stickerState);
     if (line == null) return;
 
-    var (w, h) = _text.Measure(line, size);
+    var (w, _) = _text.Measure(line, Size);
     float pad = 8f;
-    var pos = new Vector2(windowSize.X - w - pad - 6f, pad + 6f);
+    DrawWithHalo(line, new Vector2(windowSize.X - w - pad - 6f, pad + 6f), windowSize);
+  }
 
-    // sombra-fundo: desenha 4 deslocamentos do mesmo texto em preto pra fazer halo
-    foreach (var off in new[] { new Vector2(-1, 0), new Vector2(1, 0), new Vector2(0, -1), new Vector2(0, 1) })
-      _text.Draw(line, size, pos + off, windowSize, bg);
+  private void DrawHelp(Vector2 windowSize)
+  {
+    var pos = new Vector2(24f, 24f);
+    foreach (var line in HelpLines)
+    {
+      if (line.Length > 0) DrawWithHalo(line, pos, windowSize);
+      pos.Y += Size * 1.5f;
+    }
+  }
 
-    _text.Draw(line, size, pos, windowSize, fg);
+  // sombra-fundo: o mesmo texto em preto deslocado em volta faz um halo
+  private void DrawWithHalo(string line, Vector2 pos, Vector2 windowSize)
+  {
+    foreach (var off in Halo)
+      _text.Draw(line, Size, pos + off, windowSize, Bg);
+    _text.Draw(line, Size, pos, windowSize, Fg);
   }
 
   private static string? BuildLine(DrawTool draw, ColorPicker picker,

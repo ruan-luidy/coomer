@@ -147,7 +147,7 @@ public sealed class CoomerApp
     var windowSize = new Vector2(_screenshot.Width, _screenshot.Height);
     _renderer.Draw(_camera, _flashlight, _config, _handler.Mirror, windowSize,
                    _handler.CursorPosition, _draw, _picker.History, _exporter,
-                   _stickers, _stickerState, _picker);
+                   _stickers, _stickerState, _picker, _handler.ShowHelp);
 
     // Depois do Draw e antes do swap: framebuffer ja tem o composite final.
     int yOff = _window.FramebufferSize.Y - _screenshot.Height;

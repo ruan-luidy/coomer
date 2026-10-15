@@ -99,7 +99,7 @@ public sealed unsafe class Renderer : IDisposable
                    bool mirror, Vector2 windowSize, Vector2 cursor,
                    DrawTool drawTool, ColorHistory? history, RegionExporter? exporter,
                    StickerCache stickers, StickerState stickerState,
-                   ColorPicker picker)
+                   ColorPicker picker, bool showHelp)
   {
     _text.NewFrame();
     _gl.ClearColor(0.1f, 0.1f, 0.1f, 1.0f);
@@ -151,7 +151,7 @@ public sealed unsafe class Renderer : IDisposable
     _stickerRenderer.DrawStamps(drawTool, camera, mirror, windowSize, _screenshot, cursor, stickers, stickerState, exporter, flashlight, _text, invertMode);
     _strokes.Draw(drawTool, camera, mirror, windowSize, _screenshot, cursor, history, exporter, invertMode);
     _palette.Draw(windowSize, drawTool, stickers, stickerState);
-    _hud.Draw(windowSize, drawTool, picker, exporter!, stickerState);
+    _hud.Draw(windowSize, drawTool, picker, exporter!, stickerState, showHelp);
   }
 
   public void Dispose()

@@ -33,6 +33,7 @@ public sealed class InputHandler
 
   public bool Quitting { get; private set; }
   public bool Mirror { get; private set; }
+  public bool ShowHelp { get; private set; }
   public Vector2 CursorPosition => _mouse.Current;
   public bool Dragging => _mouse.Drag;
   public ColorPicker Picker => _picker;
@@ -243,8 +244,14 @@ public sealed class InputHandler
         if (_draw.TextMode) _draw.TypeChar('\b');
         break;
       case Key.Q:
+        // com sticker selecionado q gira; fora disso fecha (como no boomer)
         if (_draw.IsEnabled && _draw.StickerMode && _draw.SelectedStickerIndex >= 0)
           _draw.RotateSelected(-MathF.PI / 18f * (_shift ? 3f : 1f));
+        else
+          Quitting = true;
+        break;
+      case Key.F1:
+        ShowHelp = !ShowHelp;
         break;
       case Key.E:
         if (_draw.IsEnabled && _draw.StickerMode && _draw.SelectedStickerIndex >= 0)
@@ -329,6 +336,7 @@ public sealed class InputHandler
       if (_exporter.Active) { _exporter.Cancel(); return; }
       if (_draw.TextMode && _draw.ActiveText != null) { _draw.CancelActiveText(); return; }
       if (_draw.IsEnabled && _draw.SelectedStickerIndex >= 0) { _draw.DeselectSticker(); return; }
+      if (ShowHelp) { ShowHelp = false; return; }
       Quitting = true;
     }
   }

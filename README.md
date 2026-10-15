@@ -91,6 +91,7 @@ Inside the overlay:
 
 | Control                            | Description                                  |
 |------------------------------------|----------------------------------------------|
+| `F1`                               | Show / hide the shortcut cheat sheet         |
 | `0`                                | Reset position, scale and mirror             |
 | `q` or `Esc`                       | Close the overlay (coomer keeps running)     |
 | `r`                                | Reload configuration                         |
