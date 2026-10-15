@@ -113,9 +113,12 @@ image and stay above the flashlight shadow.
 | Control                  | Description                                                    |
 |--------------------------|----------------------------------------------------------------|
 | `d`                      | Toggle drawing                                                 |
-| `s`                      | Cycle shape: free → line → arrow → rect → circle               |
+| `s`                      | Cycle shape: free → line → arrow → rect → circle → highlighter |
 | Hold `Shift` while drag  | Snap line to 45°, force square / perfect circle                |
 | `t`                      | Toggle stamp mode (click drops a numbered badge)               |
+| `w`                      | Text tool: click, type, `Enter` commits, `Esc` cancels         |
+| `y`                      | Sticker mode (see below)                                       |
+| `Space` + drag           | Pan without leaving drawing mode                               |
 | `v`                      | Hide / show strokes + stamps (brush ring stays)                |
 | `z`                      | Undo (strokes, stamps, stickers, text — whatever came last)    |
 | `Shift+z` / `Ctrl+y`     | Redo                                                           |
@@ -124,6 +127,22 @@ image and stay above the flashlight shadow.
 | `,`                      | Cycle pen color (also Ctrl + scroll for thickness)             |
 
 Picked colors stack as swatches in the bottom-right (last 8, LRU).
+
+#### Stickers (`y`)
+
+Drop images (`png`, `jpg`, `webp`, `gif`, `bmp`) in `%APPDATA%\coomer\stickers\`;
+subfolders become categories. Click stamps the current sticker, click an
+existing one to select it and drag to move.
+
+| Control                  | Description                                  |
+|--------------------------|----------------------------------------------|
+| `Tab` / `;`              | Next sticker (`Shift` = previous)            |
+| `'` / `` ` ``            | Next category                                |
+| `h`                      | Mirror the next sticker                      |
+| `[` / `]`, Ctrl + scroll | Size of the next sticker                     |
+| `q` / `e`                | Rotate selected (`Shift` = 30° steps)        |
+| Scroll                   | Resize selected                              |
+| `Delete`                 | Delete selected                              |
 
 #### Shape smarts
 
@@ -134,7 +153,8 @@ Picked colors stack as swatches in the bottom-right (last 8, LRU).
 
 ## Configuration
 
-`%APPDATA%\coomer\config`, plain `key = value`:
+`%APPDATA%\coomer\config.lua` (the old `config` file is still read), Lua-ish
+`key = value` with `--` comments:
 
 | Name           | Description                                          |
 |----------------|------------------------------------------------------|
@@ -144,8 +164,11 @@ Picked colors stack as swatches in the bottom-right (last 8, LRU).
 | scale_friction | How quickly zooming slows down after scrolling       |
 | pan_inertia    | `false` = image stops with the mouse (no glide)      |
 | bubble_rigid   | `true` = flashlight snaps to cursor (no spring lerp/deform) |
+| print_effect   | `"negative"` inverts the region-copy rect, `"glass"` dims outside it |
 
-Press `r` inside the overlay to reload without restarting.
+Press `r` inside the overlay to reload without restarting. A bad line (typo
+in a key, invalid number) is skipped instead of discarding the whole file;
+skipped lines and any other errors go to `%APPDATA%\coomer\coomer.log`.
 
 ## Differences from boomer
 
@@ -153,5 +176,6 @@ Press `r` inside the overlay to reload without restarting.
 - Panning is clamped to the image bounds.
 - The flashlight radius is a fixed screen size (it does not grow with zoom).
 - Runs resident with a global hotkey instead of being launched per use.
-- Adds an annotation layer (pen, line, arrow, rect, circle/ellipse, numbered
-  stamps), a region-to-clipboard tool and a save-to-disk hotkey.
+- Adds an annotation layer (pen, line, arrow, rect, ellipse, highlighter,
+  numbered stamps, text, image stickers) with undo/redo, a region-to-clipboard
+  tool and a save-to-PNG hotkey.
