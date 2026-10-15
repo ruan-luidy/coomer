@@ -109,7 +109,9 @@ public sealed class CoomerApp
 
   private void OnUpdate(double delta)
   {
-    float dt = 1f / _frameRate;
+    // dt real (clampado): com o 1/refresh fixo a fisica corria mais rapido
+    // quando o refresh do monitor nao era detectado e lerda quando frame caia.
+    float dt = delta > 0 ? (float)Math.Clamp(delta, 1.0 / 1000.0, 1.0 / 30.0) : 1f / _frameRate;
     var windowSize = new Vector2(_screenshot.Width, _screenshot.Height);
 
     _handler.Tick();

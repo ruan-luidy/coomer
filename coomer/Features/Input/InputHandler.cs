@@ -128,9 +128,17 @@ public sealed class InputHandler
         break;
 
       case Key.R:
-        if (File.Exists(_configPath))
-          _config.Reload(_configPath);
-        _stickers.Reload();
+        try
+        {
+          if (File.Exists(_configPath))
+            _config.Reload(_configPath);
+          _stickers.Reload();
+        }
+        catch (Exception ex)
+        {
+          // r com config/sticker quebrado nao pode fechar o overlay
+          Log.Error("reload", ex);
+        }
         _stickerState.RefreshFrom(_stickers);
         break;
 

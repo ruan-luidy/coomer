@@ -26,6 +26,11 @@ internal static partial class HotkeyNative
   [return: MarshalAs(UnmanagedType.Bool)]
   public static partial bool UnregisterHotKey(nint hWnd, int id);
 
+  public const uint MB_ICONWARNING = 0x30;
+
+  [LibraryImport("user32.dll", EntryPoint = "MessageBoxW", StringMarshalling = StringMarshalling.Utf16)]
+  public static partial int MessageBox(nint hWnd, string text, string caption, uint type);
+
   // GetMessage bloqueia ate chegar uma mensagem (0% CPU enquanto espera o atalho).
   [LibraryImport("user32.dll", EntryPoint = "GetMessageW")]
   public static partial int GetMessage(out Msg lpMsg, nint hWnd, uint wMsgFilterMin, uint wMsgFilterMax);

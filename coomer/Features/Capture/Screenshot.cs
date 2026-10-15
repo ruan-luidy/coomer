@@ -40,36 +40,45 @@ public sealed unsafe class Screenshot
 
   private static Screenshot Grab(int x, int y, int w, int h)
   {
+    if (w <= 0 || h <= 0)
+      throw new InvalidOperationException($"monitor com dimensao invalida {w}x{h}");
+
     nint screenDc = Native.GetDC(0);
     nint memDc = Native.CreateCompatibleDC(screenDc);
     nint bitmap = Native.CreateCompatibleBitmap(screenDc, w, h);
     nint previous = Native.SelectObject(memDc, bitmap);
-
-    Native.BitBlt(memDc, 0, 0, w, h, screenDc, x, y, Native.SRCCOPY);
-    Native.SelectObject(memDc, previous); // desselecionar antes do GetDIBits
-
-    var pixels = new byte[w * h * 4];
-    var info = new BitmapInfo
+    try
     {
-      bmiHeader = new BitmapInfoHeader
+      Native.BitBlt(memDc, 0, 0, w, h, screenDc, x, y, Native.SRCCOPY);
+      Native.SelectObject(memDc, previous); // desselecionar antes do GetDIBits
+
+      var pixels = new byte[w * h * 4];
+      var info = new BitmapInfo
       {
-        biSize = (uint)sizeof(BitmapInfoHeader),
-        biWidth = w,
-        biHeight = -h, // negativo = top-down (linha 0 = topo), igual ao XGetImage
-        biPlanes = 1,
-        biBitCount = 32,
-        biCompression = Native.BI_RGB,
-      }
-    };
+        bmiHeader = new BitmapInfoHeader
+        {
+          biSize = (uint)sizeof(BitmapInfoHeader),
+          biWidth = w,
+          biHeight = -h, // negativo = top-down (linha 0 = topo), igual ao XGetImage
+          biPlanes = 1,
+          biBitCount = 32,
+          biCompression = Native.BI_RGB,
+        }
+      };
 
-    fixed (byte* p = pixels)
-      Native.GetDIBits(memDc, bitmap, 0, (uint)h, p, ref info, Native.DIB_RGB_COLORS);
+      fixed (byte* p = pixels)
+        Native.GetDIBits(memDc, bitmap, 0, (uint)h, p, ref info, Native.DIB_RGB_COLORS);
 
-    Native.DeleteObject(bitmap);
-    Native.DeleteDC(memDc);
-    Native.ReleaseDC(0, screenDc);
-
-    return new Screenshot(x, y, w, h, pixels);
+      return new Screenshot(x, y, w, h, pixels);
+    }
+    finally
+    {
+      // processo e residente: handle GDI vazado em excecao acumula pra sempre
+      Native.SelectObject(memDc, previous);
+      Native.DeleteObject(bitmap);
+      Native.DeleteDC(memDc);
+      Native.ReleaseDC(0, screenDc);
+    }
   }
 
   public string GetPixelHex(int x, int y)

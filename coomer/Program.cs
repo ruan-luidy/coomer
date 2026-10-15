@@ -1,3 +1,4 @@
+using Coomer;
 using Coomer.App;
 using Coomer.Features.Capture;
 using Coomer.Features.Configuration;
@@ -25,7 +26,10 @@ string configDir = Path.Combine(
 string luaPath = Path.Combine(configDir, "config.lua");
 string legacyPath = Path.Combine(configDir, "config");
 
-new HotkeyHost().Run(onShow: () =>
+AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+    Log.Error("excecao nao tratada", (Exception)e.ExceptionObject);
+
+bool hotkeysOk = new HotkeyHost().Run(onShow: () =>
 {
   try
   {
@@ -36,14 +40,19 @@ new HotkeyHost().Run(onShow: () =>
 
     Config config;
     try { config = File.Exists(configPath) ? Config.Load(configPath) : Config.Default(); }
-    catch { config = Config.Default(); }
+    catch (Exception ex)
+    {
+      Log.Error($"config: falha lendo {configPath}, usando default", ex);
+      config = Config.Default();
+    }
 
     new CoomerApp(config, configPath).Run();
   }
-  catch
+  catch (Exception ex)
   {
     // Falha no overlay nao pode derrubar o processo residente.
+    Log.Error("overlay", ex);
   }
 });
 
-return 0;
+return hotkeysOk ? 0 : 1;

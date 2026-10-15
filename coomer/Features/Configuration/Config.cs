@@ -65,43 +65,60 @@ public sealed class Config
       var key = line[..idx].Trim();
       var value = line[(idx + 1)..].Trim();
 
-      switch (key)
+      // linha ruim (chave desconhecida, numero invalido) so e ignorada e vai
+      // pro log — antes uma chave errada jogava o config inteiro fora e o app
+      // voltava pro default sem avisar.
+      try
       {
-        case "min_scale": config.MinScale = ParseFloat(value); break;
-        case "scroll_speed": config.ScrollSpeed = ParseFloat(value); break;
-        case "drag_friction": config.DragFriction = ParseFloat(value); break;
-        case "scale_friction": config.ScaleFriction = ParseFloat(value); break;
-
-        case "camera_pan_amount": config.CameraPanAmount = ParseFloat(value); break;
-        case "lerp_camera_recenter": config.LerpCameraRecenter = ParseBool(value); break;
-        case "camera_recenter_lerp_speed": config.CameraRecenterLerpSpeed = ParseFloat(value); break;
-        case "hide_cursor_on_flashlight": config.HideCursorOnFlashlight = ParseBool(value); break;
-        case "pan_inertia": config.PanInertia = ParseBool(value); break;
-
-        case "bubble_mass": config.BubbleMass = ParseFloat(value); break;
-        case "bubble_spring_k": config.BubbleSpringK = ParseFloat(value); break;
-        case "bubble_damping": config.BubbleDamping = ParseFloat(value); break;
-        case "bubble_stretch_factor": config.BubbleStretchFactor = ParseFloat(value); break;
-        case "bubble_squeeze_factor": config.BubbleSqueezeFactor = ParseFloat(value); break;
-        case "bubble_deform_smoothing": config.BubbleDeformSmoothing = ParseFloat(value); break;
-        case "bubble_rigid": config.BubbleRigid = ParseBool(value); break;
-
-        case "blur_background": config.BlurBackground = ParseBool(value); break;
-        case "background_blur_radius": config.BackgroundBlurRadius = ParseFloat(value); break;
-        case "blur_outside_flashlight": config.BlurOutsideFlashlight = ParseBool(value); break;
-        case "outside_flashlight_blur_radius": config.OutsideFlashlightBlurRadius = ParseFloat(value); break;
-
-        case "flashlight_fisheye": config.FlashlightFisheye = ParseBool(value); break;
-        case "fisheye_strength": config.FisheyeStrength = ParseFloat(value); break;
-        case "flashlight_clear_glass": config.FlashlightClearGlass = ParseBool(value); break;
-        case "clear_glass_zoom": config.ClearGlassZoom = ParseFloat(value); break;
-
-        case "print_effect": config.PrintEffect = ParseString(value); break;
-
-        default: throw new InvalidDataException($"Chave de config desconhecida `{key}`");
+        if (!Apply(config, key, value))
+          Log.Error($"config: chave desconhecida `{key}` ignorada ({path})");
+      }
+      catch (FormatException)
+      {
+        Log.Error($"config: valor invalido `{value}` pra `{key}` ignorado ({path})");
       }
     }
     return config;
+  }
+
+  private static bool Apply(Config config, string key, string value)
+  {
+    switch (key)
+    {
+      case "min_scale": config.MinScale = ParseFloat(value); break;
+      case "scroll_speed": config.ScrollSpeed = ParseFloat(value); break;
+      case "drag_friction": config.DragFriction = ParseFloat(value); break;
+      case "scale_friction": config.ScaleFriction = ParseFloat(value); break;
+
+      case "camera_pan_amount": config.CameraPanAmount = ParseFloat(value); break;
+      case "lerp_camera_recenter": config.LerpCameraRecenter = ParseBool(value); break;
+      case "camera_recenter_lerp_speed": config.CameraRecenterLerpSpeed = ParseFloat(value); break;
+      case "hide_cursor_on_flashlight": config.HideCursorOnFlashlight = ParseBool(value); break;
+      case "pan_inertia": config.PanInertia = ParseBool(value); break;
+
+      case "bubble_mass": config.BubbleMass = ParseFloat(value); break;
+      case "bubble_spring_k": config.BubbleSpringK = ParseFloat(value); break;
+      case "bubble_damping": config.BubbleDamping = ParseFloat(value); break;
+      case "bubble_stretch_factor": config.BubbleStretchFactor = ParseFloat(value); break;
+      case "bubble_squeeze_factor": config.BubbleSqueezeFactor = ParseFloat(value); break;
+      case "bubble_deform_smoothing": config.BubbleDeformSmoothing = ParseFloat(value); break;
+      case "bubble_rigid": config.BubbleRigid = ParseBool(value); break;
+
+      case "blur_background": config.BlurBackground = ParseBool(value); break;
+      case "background_blur_radius": config.BackgroundBlurRadius = ParseFloat(value); break;
+      case "blur_outside_flashlight": config.BlurOutsideFlashlight = ParseBool(value); break;
+      case "outside_flashlight_blur_radius": config.OutsideFlashlightBlurRadius = ParseFloat(value); break;
+
+      case "flashlight_fisheye": config.FlashlightFisheye = ParseBool(value); break;
+      case "fisheye_strength": config.FisheyeStrength = ParseFloat(value); break;
+      case "flashlight_clear_glass": config.FlashlightClearGlass = ParseBool(value); break;
+      case "clear_glass_zoom": config.ClearGlassZoom = ParseFloat(value); break;
+
+      case "print_effect": config.PrintEffect = ParseString(value); break;
+
+      default: return false;
+    }
+    return true;
   }
 
   public void Reload(string path)
@@ -137,51 +154,6 @@ public sealed class Config
     ClearGlassZoom = fresh.ClearGlassZoom;
 
     PrintEffect = fresh.PrintEffect;
-  }
-
-  public void Save(string path)
-  {
-    var dir = Path.GetDirectoryName(path);
-    if (!string.IsNullOrEmpty(dir))
-      Directory.CreateDirectory(dir);
-
-    var c = CultureInfo.InvariantCulture;
-    using var w = new StreamWriter(path);
-    w.WriteLine("-- coomer config (Lua-ish: -- coments, key = value)");
-    w.WriteLine();
-    w.WriteLine($"min_scale = {MinScale.ToString(c)}");
-    w.WriteLine($"scroll_speed = {ScrollSpeed.ToString(c)}");
-    w.WriteLine($"drag_friction = {DragFriction.ToString(c)}");
-    w.WriteLine($"scale_friction = {ScaleFriction.ToString(c)}");
-    w.WriteLine();
-    w.WriteLine($"camera_pan_amount = {CameraPanAmount.ToString(c)}");
-    w.WriteLine($"lerp_camera_recenter = {(LerpCameraRecenter ? "true" : "false")}");
-    w.WriteLine($"camera_recenter_lerp_speed = {CameraRecenterLerpSpeed.ToString(c)}");
-    w.WriteLine($"hide_cursor_on_flashlight = {(HideCursorOnFlashlight ? "true" : "false")}");
-    w.WriteLine($"pan_inertia = {(PanInertia ? "true" : "false")}");
-    w.WriteLine();
-    w.WriteLine($"bubble_mass = {BubbleMass.ToString(c)}");
-    w.WriteLine($"bubble_spring_k = {BubbleSpringK.ToString(c)}");
-    w.WriteLine($"bubble_damping = {BubbleDamping.ToString(c)}");
-    w.WriteLine($"bubble_stretch_factor = {BubbleStretchFactor.ToString(c)}");
-    w.WriteLine($"bubble_squeeze_factor = {BubbleSqueezeFactor.ToString(c)}");
-    w.WriteLine($"bubble_deform_smoothing = {BubbleDeformSmoothing.ToString(c)}");
-    w.WriteLine($"bubble_rigid = {(BubbleRigid ? "true" : "false")}");
-    w.WriteLine();
-    w.WriteLine($"blur_background = {(BlurBackground ? "true" : "false")}");
-    w.WriteLine($"background_blur_radius = {BackgroundBlurRadius.ToString(c)}");
-    w.WriteLine($"blur_outside_flashlight = {(BlurOutsideFlashlight ? "true" : "false")}");
-    w.WriteLine($"outside_flashlight_blur_radius = {OutsideFlashlightBlurRadius.ToString(c)}");
-    w.WriteLine();
-    w.WriteLine($"flashlight_fisheye = {(FlashlightFisheye ? "true" : "false")}");
-    w.WriteLine($"fisheye_strength = {FisheyeStrength.ToString(c)}");
-    w.WriteLine($"flashlight_clear_glass = {(FlashlightClearGlass ? "true" : "false")}");
-    w.WriteLine($"clear_glass_zoom = {ClearGlassZoom.ToString(c)}");
-    w.WriteLine();
-    w.WriteLine("-- print_effect:");
-    w.WriteLine("--   \"negative\" = inverte cor dentro do rect (1 - rgb)");
-    w.WriteLine("--   \"glass\"    = escurece fora do rect, dentro fica natural (spotlight)");
-    w.WriteLine($"print_effect = \"{PrintEffect}\"");
   }
 
   private static string StripBlockComments(string s)
