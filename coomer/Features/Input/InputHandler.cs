@@ -6,7 +6,6 @@ using Coomer.Features.Configuration;
 using Coomer.Features.Lighting;
 using Coomer.Features.Drawing;
 using Coomer.Features.Stickers;
-using Coomer.Features.Effects;
 using Coomer.App;
 
 namespace Coomer.Features.Input;
@@ -24,8 +23,6 @@ public sealed class InputHandler
   private readonly RegionExporter _exporter;
   private readonly StickerCache _stickers;
   private readonly StickerState _stickerState;
-  private readonly RippleEffect _ripple;
-  private readonly BlackHole _blackHole;
 
   private Mouse _mouse;
   private bool _ctrl;
@@ -42,14 +39,11 @@ public sealed class InputHandler
   public DrawTool Draw => _draw;
   public RegionExporter Exporter => _exporter;
   public StickerState StickerState => _stickerState;
-  public RippleEffect Ripple => _ripple;
-  public BlackHole BlackHole => _blackHole;
 
   public InputHandler(IInputContext input, Camera camera, Flashlight flashlight,
                       Config config, Screenshot screenshot, string configPath,
                       float frameRate, ColorPicker picker, DrawTool draw,
-                      RegionExporter exporter, StickerCache stickers, StickerState stickerState,
-                      RippleEffect ripple, BlackHole blackHole)
+                      RegionExporter exporter, StickerCache stickers, StickerState stickerState)
   {
     _camera = camera;
     _flashlight = flashlight;
@@ -62,8 +56,6 @@ public sealed class InputHandler
     _exporter = exporter;
     _stickers = stickers;
     _stickerState = stickerState;
-    _ripple = ripple;
-    _blackHole = blackHole;
 
     foreach (var keyboard in input.Keyboards)
     {
@@ -144,16 +136,6 @@ public sealed class InputHandler
         if (_flashlight.IsEnabled) _draw.IsEnabled = false;
         break;
 
-      case Key.G:
-        _blackHole.Cycle();
-        if (_blackHole.Active)
-        {
-          _flashlight.IsEnabled = false;
-          _draw.IsEnabled = false;
-          _picker.IsEnabled = false;
-        }
-        break;
-
       case Key.C:
       case Key.P:
         _picker.IsEnabled = !_picker.IsEnabled;
@@ -180,20 +162,17 @@ public sealed class InputHandler
         if (_draw.IsEnabled) _draw.Clear();
         break;
       case Key.LeftBracket:
-        if (_blackHole.Interactive) _blackHole.DiskInclDelta(-MathF.PI / 36f); // -5°
-        else if (_draw.IsEnabled && _draw.TextMode) _draw.TextFontSizeDelta(-2);
+        if (_draw.IsEnabled && _draw.TextMode) _draw.TextFontSizeDelta(-2);
         else if (_draw.IsEnabled && _draw.StickerMode) _draw.StickerSizeDelta(-8f);
         else if (_draw.IsEnabled) _draw.ThicknessDelta(-1f);
         break;
       case Key.RightBracket:
-        if (_blackHole.Interactive) _blackHole.DiskInclDelta(+MathF.PI / 36f);
-        else if (_draw.IsEnabled && _draw.TextMode) _draw.TextFontSizeDelta(+2);
+        if (_draw.IsEnabled && _draw.TextMode) _draw.TextFontSizeDelta(+2);
         else if (_draw.IsEnabled && _draw.StickerMode) _draw.StickerSizeDelta(+8f);
         else if (_draw.IsEnabled) _draw.ThicknessDelta(+1f);
         break;
       case Key.Comma:
-        if (_blackHole.Interactive) _blackHole.CyclePreset(_shift ? -1 : +1);
-        else if (_draw.IsEnabled) _draw.CycleColor();
+        if (_draw.IsEnabled) _draw.CycleColor();
         break;
       case Key.V:
         if (_draw.IsEnabled) _draw.Hide = !_draw.Hide;
@@ -346,11 +325,6 @@ public sealed class InputHandler
 
   private void OnMouseDown(IMouse mouse, MouseButton button)
   {
-    // blackhole interativo: clicks no overlay nao fazem nada (panning a camera
-    // por baixo nao tem efeito visivel — o shader cobre o quad todo). Consumir
-    // o evento aqui evita disparar o pan default la embaixo.
-    if (button == MouseButton.Left && _blackHole.Interactive) return;
-
     if (button == MouseButton.Left && _picker.IsEnabled)
     {
       string hex = _picker.PickAt(_mouse.Current, _camera, _screenshot,
@@ -391,7 +365,6 @@ public sealed class InputHandler
       {
         _draw.DropSticker(_mouse.Current, new Vector2(_screenshot.Width, _screenshot.Height),
                           _screenshot, _camera, Mirror, _stickerState.Current.Path);
-        _ripple.Pop(_mouse.Current);
       }
       return;
     }
@@ -400,7 +373,6 @@ public sealed class InputHandler
     {
       _draw.DropStamp(_mouse.Current, new Vector2(_screenshot.Width, _screenshot.Height),
                       _screenshot, _camera, Mirror);
-      _ripple.Pop(_mouse.Current);
       return;
     }
 
@@ -459,9 +431,6 @@ public sealed class InputHandler
 
   private void ScrollUp()
   {
-    // blackhole: so ctrl+scroll redimensiona (consistente com flashlight);
-    // scroll puro continua valendo o zoom normal da camera.
-    if (_ctrl && _blackHole.Interactive) { _blackHole.ScaleDelta(+0.15f); return; }
     if (_draw.IsEnabled && _draw.StickerMode && _draw.SelectedStickerIndex >= 0) { _draw.ResizeSelected(+16f); return; }
     if (_ctrl && _flashlight.IsEnabled) { _flashlight.DeltaRadius += Flashlight.InitialDeltaRadius; }
     else if (_ctrl && _draw.IsEnabled && _draw.StickerMode) { _draw.StickerSizeDelta(+16f); }
@@ -475,7 +444,6 @@ public sealed class InputHandler
 
   private void ScrollDown()
   {
-    if (_ctrl && _blackHole.Interactive) { _blackHole.ScaleDelta(-0.15f); return; }
     if (_draw.IsEnabled && _draw.StickerMode && _draw.SelectedStickerIndex >= 0) { _draw.ResizeSelected(-16f); return; }
     if (_ctrl && _flashlight.IsEnabled) { _flashlight.DeltaRadius -= Flashlight.InitialDeltaRadius; }
     else if (_ctrl && _draw.IsEnabled && _draw.StickerMode) { _draw.StickerSizeDelta(-16f); }

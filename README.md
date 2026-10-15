@@ -96,7 +96,6 @@ Inside the overlay:
 | `r`                                | Reload configuration                         |
 | `m`                                | Mirror the image                             |
 | `f`                                | Toggle flashlight                            |
-| `g`                                | Cycle black hole: off → interactive → passthrough → off |
 | `c` or `p`                         | Color picker (click a pixel → hex on clipboard) |
 | `b`                                | Region copy: drag a rect, release to copy as bitmap |
 | `Ctrl+S`                           | Save the annotated screen as BMP in `Pictures/` |
@@ -104,29 +103,6 @@ Inside the overlay:
 | Scroll or `=` / `-`                | Zoom                                         |
 | `Ctrl` + scroll                    | Flashlight radius or pen thickness           |
 | `h` `j` `k` `l` / arrows           | Pan by keyboard                              |
-
-### Black hole (`g` cycles)
-
-`g` cycles three states:
-
-1. **Off** — no effect.
-2. **Interactive** — overlay captures input as usual; you can play with the hole:
-3. **Passthrough** — overlay becomes click-through; mouse goes to whatever is
-   underneath, so you can use the PC while the hole keeps animating on top.
-   Press `Esc` (global, via low-level keyboard hook) to come back to
-   interactive. The captured screenshot stays frozen — the hole lenses the
-   screen as it was at capture time, not the live desktop.
-
-| Control               | Description                                          |
-|-----------------------|------------------------------------------------------|
-| Left click            | Pulse: the hole inflates ~35% briefly                |
-| `Ctrl` + Scroll       | Resize hole (plain scroll keeps zooming the image)   |
-| `,` / `Shift+,`       | Cycle preset forward / back                          |
-| `[` / `]`             | Disk inclination − / + (0 face-on → 90° edge-on)     |
-
-Presets: **DEFAULT**, **GARGANTUA** (Interstellar look), **QUASAR** (edge-on,
-violent blue), **M87*** (calm red donut, EHT photo), **INFERNO** (everything
-maxed), **ZEN** (subtle, drifts slow).
 
 ### Drawing (`d` toggles)
 
@@ -171,12 +147,6 @@ Picked colors stack as swatches in the bottom-right (last 8, LRU).
 | bubble_rigid   | `true` = flashlight snaps to cursor (no spring lerp/deform) |
 
 Press `r` inside the overlay to reload without restarting.
-
-## Credits
-
-- The black hole shader (`Shaders/blackhole.glsl`) is adapted from
-  [s0xDk/ghostty-blackhole](https://github.com/s0xDk/ghostty-blackhole) (MIT)
-  — see [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
 
 ## Differences from boomer
 

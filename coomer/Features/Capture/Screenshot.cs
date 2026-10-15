@@ -80,37 +80,4 @@ public sealed unsafe class Screenshot
     byte r = Pixels[i + 2];
     return $"#{r:X2}{g:X2}{b:X2}";
   }
-
-  // Re-roda o BitBlt sobre o buffer existente (sem alocar). Usado no pet mode
-  // pra alimentar o shader com a desktop viva enquanto o usuario mexe no PC.
-  public void Refresh()
-  {
-    nint screenDc = Native.GetDC(0);
-    nint memDc = Native.CreateCompatibleDC(screenDc);
-    nint bitmap = Native.CreateCompatibleBitmap(screenDc, Width, Height);
-    nint previous = Native.SelectObject(memDc, bitmap);
-
-    Native.BitBlt(memDc, 0, 0, Width, Height, screenDc, OriginX, OriginY, Native.SRCCOPY);
-    Native.SelectObject(memDc, previous);
-
-    var info = new BitmapInfo
-    {
-      bmiHeader = new BitmapInfoHeader
-      {
-        biSize = (uint)sizeof(BitmapInfoHeader),
-        biWidth = Width,
-        biHeight = -Height,
-        biPlanes = 1,
-        biBitCount = 32,
-        biCompression = Native.BI_RGB,
-      }
-    };
-
-    fixed (byte* p = Pixels)
-      Native.GetDIBits(memDc, bitmap, 0, (uint)Height, p, ref info, Native.DIB_RGB_COLORS);
-
-    Native.DeleteObject(bitmap);
-    Native.DeleteDC(memDc);
-    Native.ReleaseDC(0, screenDc);
-  }
 }
